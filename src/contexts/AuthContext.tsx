@@ -20,7 +20,7 @@ interface AuthContextType {
   currentAuthUser: AuthUser | null;
   authRole: User['role'] | null;
   loading: boolean;
-  signUp: (email: string, password: string, role: 'user' | 'seller' | 'admin', fullName: string, currency?: string, phoneNumber?: string) => Promise<any>;
+  signUp: (email: string, password: string, role: 'user' | 'seller' | 'admin', fullName: string, currency?: string, phoneNumber?: string, countryId?: string) => Promise<any>;
   signIn: (
     email: string,
     password: string
@@ -157,7 +157,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     role: 'user' | 'seller' | 'admin',
     fullName: string,
     currency?: string,
-    phoneNumber?: string
+    phoneNumber?: string,
+    _countryId?: string
   ) => {
     try {
       const { data, error } = await supabase.auth.signUp({

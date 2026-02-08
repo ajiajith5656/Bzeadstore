@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { Mail, Lock, User, AlertCircle, Eye, EyeOff, Globe, ChevronDown } from 'lucide-react';
 
 interface SignupProps {
@@ -28,18 +29,38 @@ export const Signup: React.FC<SignupProps> = ({ role = 'user' }) => {
   const { signUp } = useAuth();
   const navigate = useNavigate();
 
-  // Load countries (static data — connect to backend if needed)
+  // Load countries from Supabase
   useEffect(() => {
     const loadCountries = async () => {
       try {
-        const staticCountries: Country[] = [
-          { id: '1', countryName: 'India', shortCode: 'IND', currency: 'INR', dialCode: '+91' },
-          { id: '2', countryName: 'United States', shortCode: 'USA', currency: 'USD', dialCode: '+1' },
-          { id: '3', countryName: 'United Kingdom', shortCode: 'GBR', currency: 'GBP', dialCode: '+44' },
-        ];
-        setCountries(staticCountries);
-        const india = staticCountries.find(c => c.shortCode === 'IND');
-        setCountryId(india?.id || staticCountries[0].id);
+        const { data, error: fetchErr } = await supabase
+          .from('countries')
+          .select('id, country_name, short_code, currency_code, dialing_code')
+          .eq('is_active', true)
+          .order('country_name');
+
+        if (fetchErr || !data || data.length === 0) {
+          // Fallback to static data
+          const staticCountries: Country[] = [
+            { id: '1', countryName: 'India', shortCode: 'IND', currency: 'INR', dialCode: '+91' },
+            { id: '2', countryName: 'United States', shortCode: 'USA', currency: 'USD', dialCode: '+1' },
+            { id: '3', countryName: 'United Kingdom', shortCode: 'GBR', currency: 'GBP', dialCode: '+44' },
+          ];
+          setCountries(staticCountries);
+          const india = staticCountries.find(c => c.shortCode === 'IND');
+          setCountryId(india?.id || staticCountries[0].id);
+        } else {
+          const mapped: Country[] = data.map((c: any) => ({
+            id: c.id,
+            countryName: c.country_name,
+            shortCode: c.short_code,
+            currency: c.currency_code,
+            dialCode: c.dialing_code,
+          }));
+          setCountries(mapped);
+          const india = mapped.find(c => c.shortCode === 'IND');
+          setCountryId(india?.id || mapped[0].id);
+        }
       } catch (err) {
         console.error('Error loading countries:', err);
       }
@@ -124,11 +145,15 @@ export const Signup: React.FC<SignupProps> = ({ role = 'user' }) => {
     setLoading(true);
 
     try {
-      const result = await signUp(email, password, role, fullName, selectedCountry?.currency);
+      const result = await signUp(email, password, role, fullName, selectedCountry?.currency, undefined, countryId);
 
       if (result.success) {
-        // Store email for OTP verification
+        // Store email & country_id for use after OTP verification
+        // (can't update profile yet — no active session until OTP is confirmed)
         sessionStorage.setItem('signupEmail', email);
+        if (countryId) {
+          sessionStorage.setItem('signupCountryId', countryId);
+        }
         setLoading(false);
         
         // Navigate to OTP page

@@ -1,70 +1,97 @@
 import React, { useState, useEffect } from 'react';
 import logger from '../../utils/logger';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Trash2, Lock, Loader2, CheckCircle, MapPin, Award } from 'lucide-react';
+import { LogOut, Loader2, CheckCircle, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 
+interface CountryOption {
+  id: string;
+  country_name: string;
+}
 
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const deleteUser = '';
-const getUser = '';
-const updateUser = '';
+type EditingField = 'name' | 'email' | 'phone' | 'country' | 'password' | null;
 
 export const Profile: React.FC = () => {
   const navigate = useNavigate();
-  const { user, currentAuthUser, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'security' | 'preferences'>('profile');
-  const [isEditing, setIsEditing] = useState(false);
+  const { user, signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingField, setEditingField] = useState<EditingField>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+
+  const [profileData, setProfileData] = useState({
+    name: '',
     email: '',
     phone: '',
     country: '',
-    address: '',
-    city: '',
-    state: '',
-    zipCode: '',
+    countryId: '',
   });
 
-  // Fetch user profile on mount
+  // Temp edit values for inline editing
+  const [editValue, setEditValue] = useState('');
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
+  // Fetch countries list
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        const { data } = await supabase
+          .from('countries')
+          .select('id, country_name')
+          .eq('is_active', true)
+          .order('country_name');
+        if (data) setCountries(data);
+      } catch (err) {
+        logger.error(err as Error, { context: 'Failed to load countries' });
+      }
+    };
+    loadCountries();
+  }, []);
+
+  // Fetch user profile on mount (join with countries table)
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
-        const userId = user?.id || currentAuthUser?.username;
-        
-        if (!userId) {
+        if (!user?.id) {
           navigate('/login');
           return;
         }
 
-        const response: any = await client.graphql({
-          query: getUser,
-          variables: { id: userId },
-        });
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('full_name, email, phone, country_id, countries(id, country_name)')
+          .eq('id', user.id)
+          .single();
 
-        if (response.data?.getUser) {
-          const userData = response.data.getUser;
-          setFormData({
-            firstName: userData.first_name || '',
-            lastName: userData.last_name || '',
-            email: userData.email || '',
-            phone: userData.phone_number || '',
-            country: userData.country || '',
-            address: userData.address || '',
-            city: userData.city || '',
-            state: userData.state || '',
-            zipCode: userData.zip_code || '',
+        if (fetchError) {
+          // Fallback to auth context data
+          setProfileData({
+            name: user.full_name || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            country: '',
+            countryId: '',
+          });
+        } else if (data) {
+          const countryData = data.countries as any;
+          setProfileData({
+            name: data.full_name || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            country: countryData?.country_name || '',
+            countryId: data.country_id || '',
           });
         }
-      } catch (error) {
-        logger.error(error as Error, { context: 'Failed to fetch user profile' });
+      } catch (err) {
+        logger.error(err as Error, { context: 'Failed to fetch user profile' });
         setError('Failed to load profile data');
       } finally {
         setLoading(false);
@@ -72,91 +99,116 @@ export const Profile: React.FC = () => {
     };
 
     fetchUserProfile();
-  }, [user, currentAuthUser, navigate]);
+  }, [user, navigate]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const startEditing = (field: EditingField) => {
+    setEditingField(field);
+    setError(null);
+    setSuccessMessage(null);
+    if (field === 'name') setEditValue(profileData.name);
+    else if (field === 'email') setEditValue(profileData.email);
+    else if (field === 'phone') setEditValue(profileData.phone);
+    else if (field === 'country') setEditValue(profileData.countryId);
+    else if (field === 'password') {
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    }
   };
 
-  const handleSaveProfile = async () => {
+  const cancelEditing = () => {
+    setEditingField(null);
+    setEditValue('');
+    setError(null);
+  };
+
+  const handleSaveField = async (field: 'name' | 'email' | 'phone' | 'country') => {
     try {
       setSaving(true);
       setError(null);
-      setSuccessMessage(null);
 
-      const userId = user?.id || currentAuthUser?.username;
-      if (!userId) {
-        throw new Error('User not authenticated');
+      if (!user?.id) throw new Error('User not authenticated');
+
+      if (field === 'country') {
+        // Update country_id FK
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ country_id: editValue || null })
+          .eq('id', user.id);
+        if (updateError) throw updateError;
+
+        const selectedCountry = countries.find(c => c.id === editValue);
+        setProfileData(prev => ({
+          ...prev,
+          country: selectedCountry?.country_name || '',
+          countryId: editValue,
+        }));
+      } else if (field === 'email') {
+        // Sync email with Supabase auth + profiles table
+        const { error: authError } = await supabase.auth.updateUser({ email: editValue });
+        if (authError) throw authError;
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ email: editValue })
+          .eq('id', user.id);
+        if (profileError) throw profileError;
+
+        setProfileData(prev => ({ ...prev, email: editValue }));
+      } else {
+        const updateMap: Record<string, string> = {
+          name: 'full_name',
+          phone: 'phone',
+        };
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ [updateMap[field]]: editValue })
+          .eq('id', user.id);
+        if (updateError) throw updateError;
+
+        setProfileData(prev => ({ ...prev, [field]: editValue }));
       }
 
-      const response: any = await client.graphql({
-        query: updateUser,
-        variables: {
-          input: {
-            id: userId,
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            email: formData.email,
-            phone_number: formData.phone,
-            country: formData.country,
-            address: formData.address,
-            city: formData.city,
-            state: formData.state,
-            zip_code: formData.zipCode,
-          },
-        },
-      });
-
-      if (response.data?.updateUser) {
-        logger.log('Profile updated successfully');
-        setSuccessMessage('Profile updated successfully!');
-        setIsEditing(false);
-        
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccessMessage(null), 3000);
-      }
-    } catch (error) {
-      logger.error(error as Error, { context: 'Failed to update profile' });
-      setError('Failed to save profile. Please try again.');
+      setSuccessMessage(`${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully!`);
+      setEditingField(null);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      logger.error(err as Error, { context: `Failed to update ${field}` });
+      setError(`Failed to update ${field}. Please try again.`);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleChangePassword = () => {
-    navigate('/user/change-password');
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-      return;
-    }
-
+  const handleChangePassword = async () => {
     try {
-      const userId = user?.id || currentAuthUser?.username;
-      if (!userId) {
-        throw new Error('User not authenticated');
+      setSaving(true);
+      setError(null);
+
+      if (passwordData.newPassword !== passwordData.confirmPassword) {
+        setError('New passwords do not match.');
+        setSaving(false);
+        return;
+      }
+      if (passwordData.newPassword.length < 6) {
+        setError('Password must be at least 6 characters.');
+        setSaving(false);
+        return;
       }
 
-      const response: any = await client.graphql({
-        query: deleteUser,
-        variables: {
-          input: { id: userId },
-        },
+      const { error: pwError } = await supabase.auth.updateUser({
+        password: passwordData.newPassword,
       });
 
-      if (response.data?.deleteUser) {
-        logger.log('Account deleted successfully');
-        await signOut();
-        navigate('/');
-      }
-    } catch (error) {
-      logger.error(error as Error, { context: 'Failed to delete account' });
-      alert('Failed to delete account. Please contact support.');
+      if (pwError) throw pwError;
+
+      setSuccessMessage('Password updated successfully!');
+      setEditingField(null);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      logger.error(err as Error, { context: 'Failed to change password' });
+      setError('Failed to change password. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -179,350 +231,283 @@ export const Profile: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-2xl mx-auto px-4">
+        {/* Header */}
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Login & Security</h1>
+        <p className="text-gray-500 text-sm mb-6">Manage your personal information and account security</p>
+
         {/* Success Message */}
         {successMessage && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center gap-3">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-            <span className="text-green-800">{successMessage}</span>
+            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+            <span className="text-green-800 text-sm">{successMessage}</span>
+            <button onClick={() => setSuccessMessage(null)} className="ml-auto">
+              <X className="h-4 w-4 text-green-600" />
+            </button>
           </div>
         )}
 
         {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <span className="text-red-800">{error}</span>
+        {error && editingField === null && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3">
+            <span className="text-red-800 text-sm">{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto">
+              <X className="h-4 w-4 text-red-600" />
+            </button>
           </div>
         )}
 
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-              <p className="text-gray-600 mt-2">Manage your account settings and preferences</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              <button
-                className="bg-amber-500 text-gray-900 px-4 py-2 rounded-lg hover:bg-amber-600 transition flex items-center gap-2 justify-center"
-              >
-                <Award className="w-4 h-4" />
-                View Membership
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className="bg-blue-600 text-gray-900 px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            >
-              {isEditing ? 'Cancel' : 'Edit Profile'}
-            </button>
-          </div>
-        </div>
+        {/* Profile Rows Card */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-200">
 
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="flex border-b overflow-x-auto">
-            <button
-              onClick={() => setActiveTab('profile')}
-              className={`flex-1 py-4 px-6 font-medium whitespace-nowrap ${
-                activeTab === 'profile'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Profile Information
-            </button>
-            <button
-              onClick={() => setActiveTab('addresses')}
-              className={`flex-1 py-4 px-6 font-medium whitespace-nowrap ${
-                activeTab === 'addresses'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Addresses
-            </button>
-            <button
-              onClick={() => setActiveTab('security')}
-              className={`flex-1 py-4 px-6 font-medium whitespace-nowrap ${
-                activeTab === 'security'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Security
-            </button>
-            <button
-              onClick={() => setActiveTab('preferences')}
-              className={`flex-1 py-4 px-6 font-medium whitespace-nowrap ${
-                activeTab === 'preferences'
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Preferences
-            </button>
-          </div>
-
-          {/* Tab Content */}
-          <div className="p-6">
-            {/* Profile Tab */}
-            {activeTab === 'profile' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      name="firstName"
-                      value={formData.firstName}
-                      onChange={handleInputChange}
-                      disabled={!isEditing}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      name="lastName"
-                      value={formData.lastName}
-                      onChange={handleInputChange}
-                      disabled={!isEditing}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
-                  <input
-                    type="text"
-                    name="country"
-                    value={formData.country}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    placeholder="Selected during signup"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                  <textarea
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      disabled={!isEditing}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      disabled={!isEditing}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
-                    <input
-                      type="text"
-                      name="zipCode"
-                      value={formData.zipCode}
-                      onChange={handleInputChange}
-                      disabled={!isEditing}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
-                    />
-                  </div>
-                </div>
-
-                {isEditing && (
-                  <div className="flex gap-4 pt-4">
-                    <button
-                      onClick={handleSaveProfile}
-                      disabled={saving}
-                      className="bg-blue-600 text-gray-900 px-6 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                      {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {saving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditing(false);
-                        setError(null);
-                      }}
-                      disabled={saving}
-                      className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
+          {/* ── Name ── */}
+          <div className="px-6 py-5">
+            {editingField === 'name' ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-900">Name</label>
+                <input
+                  type="text"
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  autoFocus
+                />
+                {error && editingField === 'name' && (
+                  <p className="text-red-600 text-xs">{error}</p>
                 )}
-              </div>
-            )}
-
-            {/* Addresses Tab */}
-            {activeTab === 'addresses' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                      <MapPin className="w-5 h-5 text-blue-600" />
-                      Saved Addresses
-                    </h3>
-                    <p className="text-gray-600 text-sm mt-1">Manage your saved addresses for faster checkout</p>
-                  </div>
+                <div className="flex gap-3">
                   <button
-                    onClick={() => navigate('/user/addresses')}
-                    className="bg-blue-600 text-gray-900 px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+                    onClick={() => handleSaveField('name')}
+                    disabled={saving}
+                    className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-gray-900 text-sm font-medium rounded-full transition disabled:opacity-50"
                   >
-                    Manage Addresses
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEditing} className="px-5 py-2 text-sm text-gray-600 hover:text-gray-900 transition">
+                    Cancel
                   </button>
                 </div>
-                
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-gray-700">Current Address:</p>
-                  <p className="text-gray-900 font-medium mt-2">
-                    {formData.address && `${formData.address}, ${formData.city}, ${formData.state} ${formData.zipCode}, ${formData.country}`}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Name</p>
+                  <p className="text-sm text-gray-600 mt-0.5">{profileData.name || '—'}</p>
+                </div>
+                <button
+                  onClick={() => startEditing('name')}
+                  className="px-5 py-1.5 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Email ── */}
+          <div className="px-6 py-5">
+            {editingField === 'email' ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-900">Email</label>
+                <input
+                  type="email"
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  autoFocus
+                />
+                {error && editingField === 'email' && (
+                  <p className="text-red-600 text-xs">{error}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleSaveField('email')}
+                    disabled={saving}
+                    className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-gray-900 text-sm font-medium rounded-full transition disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEditing} className="px-5 py-2 text-sm text-gray-600 hover:text-gray-900 transition">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Email</p>
+                  <p className="text-sm text-gray-600 mt-0.5">{profileData.email || '—'}</p>
+                </div>
+                <button
+                  onClick={() => startEditing('email')}
+                  className="px-5 py-1.5 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Edit
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Primary Mobile Number ── */}
+          <div className="px-6 py-5">
+            {editingField === 'phone' ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-900">Primary mobile number</label>
+                <input
+                  type="tel"
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  autoFocus
+                />
+                {error && editingField === 'phone' && (
+                  <p className="text-red-600 text-xs">{error}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleSaveField('phone')}
+                    disabled={saving}
+                    className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-gray-900 text-sm font-medium rounded-full transition disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEditing} className="px-5 py-2 text-sm text-gray-600 hover:text-gray-900 transition">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Primary mobile number</p>
+                  <p className="text-sm text-gray-600 mt-0.5">{profileData.phone || '—'}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Quickly sign-in, easily recover passwords, and receive security notifications with this mobile number.
                   </p>
-                  {!formData.address && (
-                    <p className="text-gray-500 italic mt-2">No address on file. Click "Manage Addresses" to add one.</p>
-                  )}
                 </div>
+                <button
+                  onClick={() => startEditing('phone')}
+                  className="px-5 py-1.5 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition flex-shrink-0"
+                >
+                  Edit
+                </button>
               </div>
             )}
+          </div>
 
-            {/* Security Tab */}
-            {activeTab === 'security' && (
-              <div className="space-y-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-start gap-4">
-                    <Lock className="w-6 h-6 text-blue-600 mt-1" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-2">Change Password</h3>
-                      <p className="text-gray-600 text-sm mb-4">
-                        Update your password regularly to keep your account secure.
-                      </p>
-                      <button
-                        onClick={handleChangePassword}
-                        className="bg-blue-600 text-gray-900 px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-                      >
-                        Change Password
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start gap-4">
-                    <Trash2 className="w-6 h-6 text-red-600 mt-1" />
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 mb-2">Delete Account</h3>
-                      <p className="text-gray-600 text-sm mb-4">
-                        Permanently delete your account and all associated data. This action cannot be undone.
-                      </p>
-                      <button
-                        onClick={handleDeleteAccount}
-                        className="bg-red-600 text-gray-900 px-4 py-2 rounded-lg hover:bg-red-700 transition"
-                      >
-                        Delete Account
-                      </button>
-                    </div>
-                  </div>
+          {/* ── Country ── */}
+          <div className="px-6 py-5">
+            {editingField === 'country' ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-900">Country</label>
+                <select
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
+                  autoFocus
+                >
+                  <option value="">Select a country</option>
+                  {countries.map(c => (
+                    <option key={c.id} value={c.id}>{c.country_name}</option>
+                  ))}
+                </select>
+                {error && editingField === 'country' && (
+                  <p className="text-red-600 text-xs">{error}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleSaveField('country')}
+                    disabled={saving}
+                    className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-gray-900 text-sm font-medium rounded-full transition disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEditing} className="px-5 py-2 text-sm text-gray-600 hover:text-gray-900 transition">
+                    Cancel
+                  </button>
                 </div>
               </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Country</p>
+                  <p className="text-sm text-gray-600 mt-0.5">{profileData.country || 'Not set'}</p>
+                </div>
+                <button
+                  onClick={() => startEditing('country')}
+                  className="px-5 py-1.5 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Edit
+                </button>
+              </div>
             )}
+          </div>
 
-            {/* Preferences Tab */}
-            {activeTab === 'preferences' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Email Notifications</h3>
-                    <p className="text-gray-600 text-sm">Receive order updates and promotions</p>
-                  </div>
-                  <input type="checkbox" className="w-5 h-5" defaultChecked />
+          {/* ── Password ── */}
+          <div className="px-6 py-5">
+            {editingField === 'password' ? (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-900">Change Password</label>
+                <input
+                  type="password"
+                  placeholder="Current password"
+                  value={passwordData.currentPassword}
+                  onChange={e => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  placeholder="New password"
+                  value={passwordData.newPassword}
+                  onChange={e => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={passwordData.confirmPassword}
+                  onChange={e => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                {error && editingField === 'password' && (
+                  <p className="text-red-600 text-xs">{error}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={saving}
+                    className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-gray-900 text-sm font-medium rounded-full transition disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEditing} className="px-5 py-2 text-sm text-gray-600 hover:text-gray-900 transition">
+                    Cancel
+                  </button>
                 </div>
-
-                <div className="border-t pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">SMS Notifications</h3>
-                      <p className="text-gray-600 text-sm">Get SMS updates for critical events</p>
-                    </div>
-                    <input type="checkbox" className="w-5 h-5" />
-                  </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Password</p>
+                  <p className="text-sm text-gray-600 mt-0.5">••••••••••</p>
                 </div>
-
-                <div className="border-t pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">Marketing Emails</h3>
-                      <p className="text-gray-600 text-sm">Receive personalized offers and deals</p>
-                    </div>
-                    <input type="checkbox" className="w-5 h-5" defaultChecked />
-                  </div>
-                </div>
+                <button
+                  onClick={() => startEditing('password')}
+                  className="px-5 py-1.5 border border-gray-300 rounded-full text-sm text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Edit
+                </button>
               </div>
             )}
           </div>
         </div>
 
         {/* Logout Button */}
-        <div className="mt-6">
+        <div className="mt-8">
           <button
             onClick={handleLogout}
-            className="w-full bg-red-600 text-gray-900 py-3 rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2"
+            className="w-full bg-red-600 text-white py-3 rounded-lg hover:bg-red-700 transition flex items-center justify-center gap-2 font-medium"
           >
             <LogOut className="w-5 h-5" />
             Logout

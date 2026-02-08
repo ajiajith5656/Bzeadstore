@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Loader2, ChevronLeft, RotateCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const OTPVerification: React.FC = () => {
   const location = useLocation();
@@ -71,6 +72,19 @@ const OTPVerification: React.FC = () => {
         const result = await confirmSignUp(email, otpCode);
         
         if (result.success) {
+          // Now user has a session — store country_id from signup
+          const pendingCountryId = sessionStorage.getItem('signupCountryId');
+          if (pendingCountryId) {
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            if (currentUser) {
+              await supabase
+                .from('profiles')
+                .update({ country_id: pendingCountryId })
+                .eq('id', currentUser.id);
+            }
+            sessionStorage.removeItem('signupCountryId');
+          }
+
           setShowSuccess(true);
           
           setTimeout(() => {
