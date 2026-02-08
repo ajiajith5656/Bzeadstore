@@ -1,0 +1,5 @@
+# Redirect non-www to www
+https://beauzead.store/* https://www.beauzead.store/:splat 301!
+
+# SPA fallback - exclude assets
+/*    /index.html   200
