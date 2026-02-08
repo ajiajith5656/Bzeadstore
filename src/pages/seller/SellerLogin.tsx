@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { logger } from '../../utils/logger';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const SellerLogin: React.FC = () => {
   const { signIn, signOut } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -54,21 +55,17 @@ const SellerLogin: React.FC = () => {
       return;
     }
 
-    // Wait a moment for the user profile to be fetched
-    setTimeout(() => {
-      // Redirect based on the actual user role from the result
-      const userRole = result.role;
-      
-      if (userRole === 'admin') {
-        window.location.href = '/admin';
-      } else if (userRole === 'seller') {
-        window.location.href = '/seller/dashboard';
-      } else {
-        // User role or unknown - go to homepage
-        window.location.href = '/';
-      }
-      setIsLoading(false);
-    }, 500);
+    // Redirect based on the actual user role from the result
+    const userRole = result.role;
+    
+    if (userRole === 'admin') {
+      navigate('/admin');
+    } else if (userRole === 'seller') {
+      navigate('/seller/dashboard');
+    } else {
+      navigate('/');
+    }
+    setIsLoading(false);
   };
 
   return (

@@ -19,7 +19,7 @@ import { useAuth } from '../../contexts/AuthContext';
 // TODO: Connect to your backend for countries/business types
 interface DBCountry { id: string; name: string; code: string; currency: string; phone_code: string; country_name: string; country_code: string; currency_code: string; dialing_code: string; }
 interface DBBusinessType { id: string; name: string; description?: string; business_type_name: string; }
-const fetchCountries = async (): Promise<DBCountry[]> => [{ id: '1', name: 'India', code: 'IN', currency: 'INR', phone_code: '+91', country_name: 'India', country_code: 'IND', currency_code: 'INR', dialing_code: '+91' }, { id: '2', name: 'United States', code: 'US', currency: 'USD', phone_code: '+1', country_name: 'United States', country_code: 'USA', currency_code: 'USD', dialing_code: '+1' }];
+const fetchCountries = async (): Promise<DBCountry[]> => [{ id: '1', name: 'India', code: 'IN', currency: 'INR', phone_code: '+91', country_name: 'India', country_code: 'IN', currency_code: 'INR', dialing_code: '+91' }, { id: '2', name: 'United States', code: 'US', currency: 'USD', phone_code: '+1', country_name: 'United States', country_code: 'US', currency_code: 'USD', dialing_code: '+1' }];
 const fetchBusinessTypes = async (): Promise<DBBusinessType[]> => [{ id: '1', name: 'Individual', business_type_name: 'Individual' }, { id: '2', name: 'Brand', business_type_name: 'Brand' }, { id: '3', name: 'Freelancing', business_type_name: 'Freelancing' }];
 
 type SignupStep = 'details' | 'otp' | 'success';
@@ -242,7 +242,7 @@ const SellerSignup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-black flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md bg-white/95 text-black rounded-2xl shadow-2xl border border-white/40 p-8 md:p-10 relative">
         <Link
           to="/"
@@ -282,7 +282,7 @@ const SellerSignup: React.FC = () => {
                     <select
                       value={formData.countryId}
                       onChange={(e) => setFormData({ ...formData, countryId: e.target.value })}
-                      className="w-full bg-white border-2 border-gray-900 text-gray-900 rounded-xl pl-12 pr-10 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all appearance-none cursor-pointer"
+                      className="w-full bg-black border-2 border-gray-900 text-white rounded-xl pl-12 pr-10 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all appearance-none cursor-pointer"
                       disabled={countries.length === 0}
                     >
                       {countries.map((c) => (
@@ -309,7 +309,7 @@ const SellerSignup: React.FC = () => {
                       placeholder="Enter legal name"
                       value={formData.fullName}
                       onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      className="w-full bg-white border-2 border-gray-900 text-gray-900 rounded-xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all placeholder:text-gray-800"
+                      className="w-full bg-black border-2 border-gray-900 text-white rounded-xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all placeholder:text-gray-800"
                     />
                   </div>
                 </div>
@@ -323,7 +323,7 @@ const SellerSignup: React.FC = () => {
                     <select
                       value={formData.businessTypeId}
                       onChange={(e) => setFormData({ ...formData, businessTypeId: e.target.value })}
-                      className="w-full bg-white border-2 border-gray-900 text-gray-900 rounded-xl pl-12 pr-10 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all appearance-none cursor-pointer"
+                      className="w-full bg-black border-2 border-gray-900 text-white rounded-xl pl-12 pr-10 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all appearance-none cursor-pointer"
                       disabled={businessTypes.length === 0}
                     >
                       {businessTypes.map((type) => (
@@ -350,7 +350,7 @@ const SellerSignup: React.FC = () => {
                       placeholder="merchant@beauzead.store"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full bg-white border-2 border-gray-900 text-gray-900 rounded-xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all placeholder:text-gray-800"
+                      className="w-full bg-black border-2 border-gray-900 text-white rounded-xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all placeholder:text-gray-800"
                     />
                   </div>
                 </div>
@@ -371,7 +371,7 @@ const SellerSignup: React.FC = () => {
                         placeholder="Mobile number"
                         value={formData.mobile}
                         onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                        className="w-full bg-white border-2 border-gray-900 text-gray-900 rounded-xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all placeholder:text-gray-800"
+                        className="w-full bg-black border-2 border-gray-900 text-white rounded-xl pl-12 pr-4 py-3.5 text-sm focus:outline-none focus:border-yellow-500 transition-all placeholder:text-gray-800"
                       />
                     </div>
                   </div>
@@ -389,7 +389,7 @@ const SellerSignup: React.FC = () => {
                       placeholder="Min 8 chars, mix of upper/lower, number, special char"
                       value={formData.password}
                       onChange={(e) => handlePasswordChange(e.target.value)}
-                      className={`w-full bg-white border-2 text-gray-900 rounded-xl pl-12 pr-12 py-3.5 text-sm focus:outline-none transition-all placeholder:text-gray-800 ${
+                      className={`w-full bg-black border-2 text-white rounded-xl pl-12 pr-12 py-3.5 text-sm focus:outline-none transition-all placeholder:text-gray-800 ${
                         passwordErrors.length > 0 ? 'border-red-500 focus:border-red-500' : 'border-gray-900 focus:border-yellow-500'
                       }`}
                     />
@@ -423,7 +423,7 @@ const SellerSignup: React.FC = () => {
                 </button>
                 
                 <div className="text-center mt-6">
-                  <p className="text-gray-500 text-xs font-medium">
+                  <p className="text-gray-400 text-xs font-medium">
                     Already have an account?{' '}
                     <button
                       type="button"
@@ -483,7 +483,7 @@ const SellerSignup: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isLoading || otp.join('').length < 6}
-                    className="w-full bg-white text-gray-900 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors disabled:opacity-50"
+                    className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-900 transition-colors disabled:opacity-50"
                   >
                     {isLoading ? <Loader2 className="animate-spin" size={20} /> : 'Verify OTP'}
                   </button>

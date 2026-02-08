@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User } from '../types';
+import { supabase } from '../lib/supabase';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import logger from '../utils/logger';
 
 export interface AuthUser {
   username: string;
@@ -30,24 +33,39 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'beauzead_auth';
+// Helper: fetch profile from Supabase `profiles` table
+async function fetchProfile(supabaseUser: SupabaseUser): Promise<User | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', supabaseUser.id)
+    .single();
 
-function loadStoredAuth(): { user: User; authUser: AuthUser } | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {
-    // ignore
-  }
-  return null;
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    email: data.email || supabaseUser.email || '',
+    role: data.role || 'user',
+    full_name: data.full_name,
+    phone: data.phone,
+    avatar_url: data.avatar_url,
+    is_verified: data.is_verified,
+    approved: data.approved,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
+  };
 }
 
-function saveAuth(user: User, authUser: AuthUser) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ user, authUser }));
-}
-
-function clearAuth() {
-  localStorage.removeItem(STORAGE_KEY);
+// Helper: convert Supabase user to AuthUser
+function toAuthUser(su: SupabaseUser): AuthUser {
+  return {
+    username: su.id,
+    userId: su.id,
+    email: su.email,
+    attributes: su.user_metadata,
+    signInDetails: { loginId: su.email, authFlowType: 'USER_PASSWORD_AUTH' },
+  };
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -56,50 +74,132 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authRole, setAuthRole] = useState<User['role'] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Initialize: check existing Supabase session & listen for auth changes
   useEffect(() => {
-    const stored = loadStoredAuth();
-    if (stored) {
-      setUser(stored.user);
-      setCurrentAuthUser(stored.authUser);
-      setAuthRole(stored.user.role);
-    }
-    setLoading(false);
+    let mounted = true;
+
+    const initSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && mounted) {
+          const profile = await fetchProfile(session.user);
+          if (profile) {
+            setUser(profile);
+            setCurrentAuthUser(toAuthUser(session.user));
+            setAuthRole(profile.role);
+          }
+        }
+      } catch (err) {
+        logger.error(err as Error, { context: 'Auth init error' });
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    initSession();
+
+    // Listen for auth state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setUser(null);
+        setCurrentAuthUser(null);
+        setAuthRole(null);
+        return;
+      }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const profile = await fetchProfile(session.user);
+        if (profile && mounted) {
+          setUser(profile);
+          setCurrentAuthUser(toAuthUser(session.user));
+          setAuthRole(profile.role);
+        }
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const signUp = async (email: string, _password: string, role: 'user' | 'seller' | 'admin', _fullName: string, _currency?: string, _phoneNumber?: string) => {
+  /**
+   * Sign up with email + password.
+   * Supabase sends a 6-digit OTP email automatically (configured in Supabase dashboard).
+   * The role & full_name are stored in user_metadata and inserted into `profiles` via DB trigger.
+   */
+  const signUp = async (
+    email: string,
+    password: string,
+    role: 'user' | 'seller' | 'admin',
+    fullName: string,
+    currency?: string,
+    phoneNumber?: string
+  ) => {
     try {
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      // TODO: Connect to your backend signup API
-      console.log('signUp called for', email, 'with role', role);
-      return { success: true, userId, isSignUpComplete: false };
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role,
+            currency: currency || 'INR',
+            phone: phoneNumber || '',
+          },
+        },
+      });
+
+      if (error) {
+        return { success: false, error: { message: error.message } };
+      }
+
+      return {
+        success: true,
+        userId: data.user?.id,
+        isSignUpComplete: false, // needs OTP verification
+      };
     } catch (error: any) {
       return { success: false, error: { message: error.message || 'Failed to sign up' } };
     }
   };
 
-  const signIn = async (email: string, _password: string) => {
+  /**
+   * Sign in with email + password.
+   * After sign-in, fetches profile to get the role and redirects accordingly.
+   */
+  const signIn = async (email: string, password: string) => {
     try {
-      // TODO: Connect to your backend login API
-      const userId = `user_${Date.now()}`;
-      const role: User['role'] = email.includes('admin') ? 'admin' : email.includes('seller') ? 'seller' : 'user';
-
-      const newUser: User = {
-        id: userId,
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        role,
-        created_at: new Date().toISOString(),
-      };
+        password,
+      });
 
-      const authUser: AuthUser = {
-        username: userId,
-        userId: userId,
-        signInDetails: { loginId: email },
-      };
+      if (error) {
+        // Map Supabase errors to user-friendly messages
+        let message = error.message;
+        if (message.includes('Invalid login credentials')) {
+          message = 'Incorrect email or password.';
+        } else if (message.includes('Email not confirmed')) {
+          message = 'Please verify your email first. Check your inbox for the OTP code.';
+        }
+        return { success: false, error: { message } };
+      }
 
-      setUser(newUser);
-      setCurrentAuthUser(authUser);
-      setAuthRole(role);
-      saveAuth(newUser, authUser);
+      if (!data.user) {
+        return { success: false, error: { message: 'Sign in failed' } };
+      }
+
+      const profile = await fetchProfile(data.user);
+      const role = profile?.role || (data.user.user_metadata?.role as User['role']) || 'user';
+
+      if (profile) {
+        setUser(profile);
+        setCurrentAuthUser(toAuthUser(data.user));
+        setAuthRole(role);
+      }
 
       return { success: true, isSignedIn: true, role };
     } catch (error: any) {
@@ -109,26 +209,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     const roleBeforeSignout = authRole;
+    await supabase.auth.signOut();
     setUser(null);
     setCurrentAuthUser(null);
     setAuthRole(null);
-    clearAuth();
     return roleBeforeSignout;
   };
 
-  const resetPassword = async (_email: string) => {
-    // TODO: Connect to your backend password reset API
-    return { success: true };
+  /**
+   * Send password reset OTP email.
+   */
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/new-password`,
+      });
+      if (error) return { success: false, error: { message: error.message } };
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: { message: error.message || 'Failed to send reset code' } };
+    }
   };
 
-  const confirmPasswordReset = async (_email: string, _code: string, _newPassword: string) => {
-    // TODO: Connect to your backend confirm password reset API
-    return { success: true };
+  /**
+   * Verify OTP and set new password.
+   * Uses Supabase's verifyOtp for email type, then updateUser for the new password.
+   */
+  const confirmPasswordReset = async (email: string, code: string, newPassword: string) => {
+    try {
+      // Verify the OTP token
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'recovery',
+      });
+
+      if (verifyError) {
+        return { success: false, error: { message: verifyError.message } };
+      }
+
+      // Update the password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (updateError) {
+        return { success: false, error: { message: updateError.message } };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: { message: error.message || 'Failed to reset password' } };
+    }
   };
 
-  const confirmSignUp = async (_email: string, _code: string) => {
-    // TODO: Connect to your backend OTP verification API
-    return { success: true, isSignUpComplete: true };
+  /**
+   * Confirm signup OTP (6-digit code sent to email).
+   */
+  const confirmSignUp = async (email: string, code: string) => {
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: 'signup',
+      });
+
+      if (error) {
+        if (error.message.includes('User already registered')) {
+          return { success: false, alreadyConfirmed: true, error: { message: 'Already verified' } };
+        }
+        return { success: false, error: { message: error.message } };
+      }
+
+      // After OTP verification, user is auto signed in
+      if (data.user) {
+        const profile = await fetchProfile(data.user);
+        if (profile) {
+          setUser(profile);
+          setCurrentAuthUser(toAuthUser(data.user));
+          setAuthRole(profile.role);
+        }
+      }
+
+      return { success: true, isSignUpComplete: true };
+    } catch (error: any) {
+      return { success: false, error: { message: error.message || 'Failed to verify OTP' } };
+    }
   };
 
   const value = {

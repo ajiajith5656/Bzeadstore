@@ -75,12 +75,36 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const path = location.pathname;
 
   useEffect(() => {
-    if (loading || !authRole) return;
+    if (loading) return;
+
+    // Public routes — always accessible
+    const publicPaths = [
+      '/', '/login', '/signup', '/otp-verification', '/forgot-password', '/new-password',
+      '/seller', '/seller/login', '/seller/signup', '/seller/otp-verification',
+      '/seller/forgot-password', '/seller/new-password',
+      '/admin/login', '/admin/signup',
+      '/privacy-policy', '/terms-of-service', '/shipping-policy', '/refund-policy',
+      '/products', '/category',
+    ];
+
+    const isPublic = publicPaths.some(p => path === p) ||
+      path.startsWith('/products/') || path.startsWith('/category/');
+
+    if (isPublic) return;
+
+    // Block unauthenticated users from all protected routes
+    if (!authRole) {
+      if (path.startsWith('/admin') || path.startsWith('/seller/')) {
+        window.location.href = '/seller/login';
+      } else {
+        window.location.href = '/login';
+      }
+      return;
+    }
 
     // ADMIN ROUTES: Allow admin ONLY
-    if (path.startsWith('/admin') && !path.includes('/login') && !path.includes('/signup')) {
+    if (path.startsWith('/admin')) {
       if (authRole !== 'admin') {
-        console.log('Unauthorized access to admin route, redirecting to seller landing');
         window.location.href = '/seller';
       }
     }
@@ -90,7 +114,6 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         path.startsWith('/seller/orders') || path.startsWith('/seller/wallet') ||
         path.startsWith('/seller/analytics') || path.startsWith('/seller/profile')) {
       if (authRole !== 'seller' && authRole !== 'admin') {
-        console.log('Unauthorized access to seller dashboard, redirecting to seller login');
         window.location.href = '/seller/login';
       }
     }
@@ -101,7 +124,6 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         path.startsWith('/checkout') || path.startsWith('/settings') ||
         path.startsWith('/notifications') || path.startsWith('/user/')) {
       if (authRole !== 'user') {
-        console.log('Unauthorized access to user route, redirecting to login');
         window.location.href = '/login';
       }
     }

@@ -108,7 +108,6 @@ export const Header: React.FC = () => {
                 e.currentTarget.style.display = 'none';
               }}
             />
-            <span className="text-2xl font-bold text-amber-600">Beauzead</span>
           </Link>
 
           {/* Desktop Right Side Actions */}
