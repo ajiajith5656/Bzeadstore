@@ -46,16 +46,12 @@ export const Categories: React.FC = () => {
             <Link
               key={category.id}
               to={`/category/${category.id}`}
-              className="flex-shrink-0 w-18 sm:w-20 cursor-pointer group"
+              className="flex-shrink-0 cursor-pointer group"
             >
-              <div className="bg-white border border-gray-100 rounded-xl p-1.5 sm:p-2.5 hover:border-amber-400 transition-all duration-200 group-hover:scale-105 shadow-sm">
-                <div className="text-2xl sm:text-3xl text-center mb-0.5 sm:mb-1">{category.icon}</div>
-                <div className="text-[10px] text-black text-center font-medium truncate">
+              <div className="bg-white border border-gray-100 rounded-full px-4 py-2 hover:border-amber-400 transition-all duration-200 group-hover:scale-105 shadow-sm whitespace-nowrap">
+                <span className="text-xs sm:text-sm text-black font-medium">
                   {category.name}
-                </div>
-                <div className="text-[10px] text-gray-400 text-center">
-                  {category.count}
-                </div>
+                </span>
               </div>
             </Link>
           ))}
