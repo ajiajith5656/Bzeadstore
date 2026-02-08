@@ -34,27 +34,48 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Helper: fetch profile from Supabase `profiles` table
-async function fetchProfile(supabaseUser: SupabaseUser): Promise<User | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', supabaseUser.id)
-    .single();
+async function fetchProfile(supabaseUser: SupabaseUser, retries = 3): Promise<User | null> {
+  for (let i = 0; i < retries; i++) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', supabaseUser.id)
+      .single();
 
-  if (error || !data) return null;
+    if (error) {
+      logger.error(new Error(`fetchProfile attempt ${i + 1}: ${error.message}`), { code: error.code });
+      // Profile may not exist yet (trigger hasn't fired), wait and retry
+      if (i < retries - 1) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      // All retries failed — return fallback from user_metadata
+      return {
+        id: supabaseUser.id,
+        email: supabaseUser.email || '',
+        role: (supabaseUser.user_metadata?.role as User['role']) || 'user',
+        full_name: supabaseUser.user_metadata?.full_name || '',
+        phone: supabaseUser.user_metadata?.phone || '',
+        created_at: supabaseUser.created_at || new Date().toISOString(),
+      };
+    }
 
-  return {
-    id: data.id,
-    email: data.email || supabaseUser.email || '',
-    role: data.role || 'user',
-    full_name: data.full_name,
-    phone: data.phone,
-    avatar_url: data.avatar_url,
-    is_verified: data.is_verified,
-    approved: data.approved,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
-  };
+    if (data) {
+      return {
+        id: data.id,
+        email: data.email || supabaseUser.email || '',
+        role: data.role || 'user',
+        full_name: data.full_name,
+        phone: data.phone,
+        avatar_url: data.avatar_url,
+        is_verified: data.is_verified,
+        approved: data.approved,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
+    }
+  }
+  return null;
 }
 
 // Helper: convert Supabase user to AuthUser

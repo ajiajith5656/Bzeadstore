@@ -105,33 +105,36 @@ create trigger profiles_updated_at
 -- Profiles
 alter table public.profiles enable row level security;
 
+-- Helper function to get current user's role (bypasses RLS)
+create or replace function public.get_my_role()
+returns text
+language sql
+security definer
+stable
+set search_path = ''
+as $$
+  select role from public.profiles where id = auth.uid()
+$$;
+
 -- Users can read their own profile
 create policy "Users can read own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
--- Users can update their own profile (but not role)
+-- Users can update their own profile
 create policy "Users can update own profile"
   on public.profiles for update
-  using (auth.uid() = id)
-  with check (
-    auth.uid() = id
-    and role = (select role from public.profiles where id = auth.uid())
-  );
+  using (auth.uid() = id);
 
--- Admins can read all profiles
+-- Admins can read all profiles (uses helper to avoid recursion)
 create policy "Admins can read all profiles"
   on public.profiles for select
-  using (
-    (select role from public.profiles where id = auth.uid()) = 'admin'
-  );
+  using (public.get_my_role() = 'admin');
 
 -- Admins can update all profiles
 create policy "Admins can update all profiles"
   on public.profiles for update
-  using (
-    (select role from public.profiles where id = auth.uid()) = 'admin'
-  );
+  using (public.get_my_role() = 'admin');
 
 -- Countries: public read
 alter table public.countries enable row level security;
