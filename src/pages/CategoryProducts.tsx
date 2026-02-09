@@ -1,12 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { MobileNav } from '../components/layout/MobileNav';
 import { ProductCard } from '../components/products/ProductCard';
-import { Menu, X, Star, DollarSign, Package } from 'lucide-react';
-import { categories } from '../data/mockData';
-import { mockProducts, hotDeals, trendingDeals } from '../data/mockData';
+import { Menu, X, Star, DollarSign, Package, Loader2 } from 'lucide-react';
+import { fetchCategoryById, fetchProducts } from '../lib/productService';
 
 interface FilterOptions {
   priceRange: [number, number];
@@ -19,6 +18,9 @@ export const CategoryProducts: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const navigate = useNavigate();
   const [showSidebar, setShowSidebar] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [category, setCategory] = useState<{ id: string; name: string; image_url?: string } | null>(null);
+  const [products, setProducts] = useState<any[]>([]);
   const [filters, setFilters] = useState<FilterOptions>({
     priceRange: [0, 50000],
     rating: null,
@@ -26,9 +28,36 @@ export const CategoryProducts: React.FC = () => {
     sortBy: 'featured',
   });
 
-  // Get category details
-  const category = categories.find((cat) => cat.id === categoryId);
+  useEffect(() => {
+    if (!categoryId) return;
+    const load = async () => {
+      setLoading(true);
+      // Fetch category details
+      const { data: catData } = await fetchCategoryById(categoryId);
+      if (catData) {
+        setCategory({ id: catData.id, name: catData.name, image_url: catData.image_url });
+      }
+      // Fetch products for this category (using category name since products.category is text)
+      const categoryName = catData?.name || '';
+      const { data: prods } = await fetchProducts({ category: categoryName, limit: 200 });
+      setProducts(prods || []);
+      setLoading(false);
+    };
+    load();
+  }, [categoryId]);
   
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   if (!category) {
     return (
       <div className="min-h-screen bg-white flex flex-col">
@@ -49,12 +78,9 @@ export const CategoryProducts: React.FC = () => {
     );
   }
 
-  // Get all products and filter based on category
-  const allProducts = [...mockProducts, ...hotDeals, ...trendingDeals];
-  
   // Filter and sort products
   const filteredProducts = useMemo(() => {
-    let filtered = allProducts.filter((product) => {
+    let filtered = products.filter((product) => {
       // Filter by price
       if (product.price < filters.priceRange[0] || product.price > filters.priceRange[1]) {
         return false;
@@ -87,7 +113,7 @@ export const CategoryProducts: React.FC = () => {
       default:
         return filtered;
     }
-  }, [filters]);
+  }, [filters, products]);
 
   const handlePriceChange = (type: 'min' | 'max', value: number) => {
     const [min, max] = filters.priceRange;
@@ -107,7 +133,7 @@ export const CategoryProducts: React.FC = () => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-amber-600 mb-1.5">
-              {category.icon} {category.name}
+              {category.name}
             </h1>
             <p className="text-sm text-gray-500">{filteredProducts.length} products</p>
           </div>

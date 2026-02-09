@@ -1,47 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { logger } from '../../../utils/logger';
 import { Loading, ErrorMessage } from '../components/StatusIndicators';
 import type { DashboardData } from '../../../types';
+import { supabase } from '../../../lib/supabase';
+import { fetchCategories, fetchProducts } from '../../../lib/productService';
 
-
-// GraphQL queries
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-
-const listUsersQuery = `
-  query ListUsers {
-    listUsers {
-      items {
-        userId
-        profile_type
-        created_at
-      }
-    }
-  }
-`;
-
-const listCategoriesQuery = `
-  query ListCategories {
-    listCategories {
-      items {
-        categoryId
-        name
-      }
-    }
-  }
-`;
-
-const listProductsQuery = `
-  query ListProducts {
-    listProducts {
-      items {
-        productId
-        name
-        status
-      }
-    }
-  }
-`;
 
 interface MetricCardProps {
   title: string;
@@ -72,34 +34,26 @@ export const AdminOverview: React.FC = () => {
   const metrics = data?.metrics;
 
   useEffect(() => {
-    const fetchMetrics = async () => {
+    const loadDashboard = async () => {
       try {
-        // Fetch users
-        const usersResponse: any = await client.graphql({
-          query: listUsersQuery,
-          authMode: 'apiKey',
-        });
-        const users = usersResponse.data.listUsers.items || [];
+        // Fetch profiles (users + sellers)
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, profile_type, created_at');
+        const users = profiles || [];
 
         // Fetch categories
-        const categoriesResponse: any = await client.graphql({
-          query: listCategoriesQuery,
-          authMode: 'apiKey',
-        });
-        const categories = categoriesResponse.data.listCategories.items || [];
+        const { data: categoriesData } = await fetchCategories(false);
+        const categories = categoriesData || [];
 
         // Fetch products
-        const productsResponse: any = await client.graphql({
-          query: listProductsQuery,
-          authMode: 'apiKey',
-        });
-        const products = productsResponse.data.listProducts.items || [];
+        const { data: productsData, count } = await fetchProducts({ limit: 1 });
+        const totalProducts = count || (productsData || []).length;
 
         // Calculate metrics
         const totalUsers = users.filter((u: any) => u.profile_type !== 'seller' && u.profile_type !== 'admin').length;
         const totalSellers = users.filter((u: any) => u.profile_type === 'seller').length;
         const primeMembers = users.filter((u: any) => u.profile_type === 'prime').length;
-        const totalProducts = products.length;
 
         // Get current month registrations
         const currentMonth = new Date().getMonth();
@@ -118,35 +72,35 @@ export const AdminOverview: React.FC = () => {
 
         setData({
           metrics: {
-            total_sales: 0, // TODO: Add orders table
-            total_expenses: 0, // TODO: Add expenses tracking
+            total_sales: 0,
+            total_expenses: 0,
             total_products: totalProducts,
             total_users: totalUsers,
             total_sellers: totalSellers,
-            total_bookings: 0, // TODO: Add orders table
-            ongoing_orders: 0, // TODO: Add orders table
-            returns_cancellations: 0, // TODO: Add returns tracking
+            total_bookings: 0,
+            ongoing_orders: 0,
+            returns_cancellations: 0,
           },
           user_registrations: userRegistrationsThisMonth,
           prime_members: primeMembers,
           seller_registrations: sellerRegistrationsThisMonth,
           top_categories: categories.slice(0, 5).map((c: any) => ({
-            id: c.categoryId,
+            id: c.id,
             name: c.name,
           })),
-          top_sellers: [], // TODO: Add seller revenue tracking
+          top_sellers: [],
         });
 
         setError(null);
-      } catch (err) {
-        logger.error(err as Error, { context: 'Error loading dashboard data' });
+      } catch (err: any) {
+        console.error('Error loading dashboard data', err);
         setError('Failed to load dashboard metrics');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMetrics();
+    loadDashboard();
   }, []);
 
   if (loading) return <Loading message="Loading dashboard metrics..." />;

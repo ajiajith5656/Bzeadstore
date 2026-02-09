@@ -64,14 +64,98 @@ export async function fetchSimilarProducts(category: string, excludeId: string, 
 
 // ---------- CATEGORIES ----------
 
-export async function fetchCategories() {
-  const { data, error } = await supabase
+export async function fetchCategories(activeOnly = true) {
+  let query = supabase
     .from('categories')
-    .select('id, name, description, image_url, is_active, sub_categories(id, name, is_active)')
-    .eq('is_active', true)
+    .select('id, name, description, image_url, is_active, display_order, created_at, sub_categories(id, name, description, is_active, created_at)')
     .order('display_order');
+  if (activeOnly) query = query.eq('is_active', true);
+  const { data, error } = await query;
   return { data: data || [], error: error?.message || null };
 }
+
+export async function fetchCategoryById(id: string) {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name, description, image_url, is_active, display_order, created_at, sub_categories(id, name, description, is_active, created_at)')
+    .eq('id', id)
+    .single();
+  return { data, error: error?.message || null };
+}
+
+export async function createCategory(cat: { name: string; description?: string; image_url?: string; display_order?: number }) {
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ name: cat.name, description: cat.description || '', image_url: cat.image_url || '', display_order: cat.display_order || 0 })
+    .select()
+    .single();
+  return { data, error: error?.message || null };
+}
+
+export async function updateCategory(id: string, updates: { name?: string; description?: string; image_url?: string; is_active?: boolean; display_order?: number }) {
+  const { data, error } = await supabase
+    .from('categories')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  return { data, error: error?.message || null };
+}
+
+export async function deleteCategory(id: string) {
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  return { success: !error, error: error?.message || null };
+}
+
+// ---------- SUB-CATEGORIES ----------
+
+export async function fetchSubCategories(categoryId: string) {
+  const { data, error } = await supabase
+    .from('sub_categories')
+    .select('id, category_id, name, description, is_active, created_at')
+    .eq('category_id', categoryId)
+    .order('name');
+  return { data: data || [], error: error?.message || null };
+}
+
+export async function createSubCategory(sub: { category_id: string; name: string; description?: string }) {
+  const { data, error } = await supabase
+    .from('sub_categories')
+    .insert({ category_id: sub.category_id, name: sub.name, description: sub.description || '' })
+    .select()
+    .single();
+  return { data, error: error?.message || null };
+}
+
+export async function updateSubCategory(id: string, updates: { name?: string; description?: string; is_active?: boolean }) {
+  const { data, error } = await supabase
+    .from('sub_categories')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  return { data, error: error?.message || null };
+}
+
+export async function deleteSubCategory(id: string) {
+  const { error } = await supabase.from('sub_categories').delete().eq('id', id);
+  return { success: !error, error: error?.message || null };
+}
+
+// ---------- IMAGE UPLOAD (categories) ----------
+
+export async function uploadCategoryImage(file: File): Promise<string> {
+  const ext = file.name.split('.').pop();
+  const path = `categories/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(path, file, { contentType: file.type });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// ---------- COUNTRIES ----------
 
 export async function fetchCountries() {
   const { data, error } = await supabase

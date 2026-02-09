@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Loader2 } from 'lucide-react';
-
-// TODO: Backend stubs — connect to your API
-const categoryService = {
-  getAllCategories: async () => [{ id: '', name: '' }],
-  getSubCategoriesByCategory: async (..._a: any[]) => [],
-  updateSubCategory: async (..._a: any[]) => ({}),
-  createSubCategory: async (..._a: any[]) => ({}),
-  deleteSubCategory: async (..._a: any[]) => ({}),
-};
+import {
+  fetchCategories,
+  fetchSubCategories,
+  createSubCategory,
+  updateSubCategory,
+  deleteSubCategory as deleteSubCategoryApi,
+} from '../../../lib/productService';
 
 interface Category {
   id: string;
@@ -17,11 +15,10 @@ interface Category {
 
 interface SubCategory {
   id: string;
-  categoryId: string;
+  category_id: string;
   name: string;
   description?: string;
-  imageUrl?: string;
-  isActive: boolean;
+  is_active: boolean;
 }
 
 export const SubCategoryManagement: React.FC = () => {
@@ -34,7 +31,6 @@ export const SubCategoryManagement: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    imageUrl: '',
   });
 
   useEffect(() => {
@@ -48,85 +44,74 @@ export const SubCategoryManagement: React.FC = () => {
   }, [selectedCategory]);
 
   const loadCategories = async () => {
-    const cats = await categoryService.getAllCategories();
-    if (cats) {
+    const { data } = await fetchCategories(false);
+    if (data) {
+      const cats = data.map((c: any) => ({ id: c.id, name: c.name }));
       setCategories(cats);
-      if (cats.length > 0) {
-        setSelectedCategory(cats[0].id);
-      }
+      if (cats.length > 0) setSelectedCategory(cats[0].id);
     }
+    setLoading(false);
   };
 
   const loadSubcategories = async () => {
     setLoading(true);
-    const subs = await categoryService.getSubCategoriesByCategory(selectedCategory);
-    setSubcategories(subs);
+    const { data } = await fetchSubCategories(selectedCategory);
+    setSubcategories((data || []).map((s: any) => ({
+      id: s.id,
+      category_id: s.category_id,
+      name: s.name,
+      description: s.description,
+      is_active: s.is_active,
+    })));
     setLoading(false);
   };
 
   const handleAddNew = () => {
     setEditingId(null);
-    setFormData({ name: '', description: '', imageUrl: '' });
+    setFormData({ name: '', description: '' });
     setShowForm(true);
   };
 
   const handleEdit = (sub: SubCategory) => {
     setEditingId(sub.id);
-    setFormData({
-      name: sub.name,
-      description: sub.description || '',
-      imageUrl: sub.imageUrl || '',
-    });
+    setFormData({ name: sub.name, description: sub.description || '' });
     setShowForm(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.name) {
-      alert('Name is required');
-      return;
-    }
-
-    if (!selectedCategory) {
-      alert('Please select a category');
-      return;
-    }
+    if (!formData.name) { alert('Name is required'); return; }
+    if (!selectedCategory) { alert('Please select a category'); return; }
 
     if (editingId) {
-      const success = await categoryService.updateSubCategory(
-        editingId,
-        selectedCategory,
-        formData.name,
-        formData.description,
-        formData.imageUrl
-      );
-      if (success) {
+      const { error } = await updateSubCategory(editingId, { name: formData.name, description: formData.description });
+      if (!error) {
         alert('Updated successfully');
         loadSubcategories();
         setShowForm(false);
+      } else {
+        alert(error);
       }
     } else {
-      const success = await categoryService.createSubCategory(
-        selectedCategory,
-        formData.name,
-        formData.description,
-        formData.imageUrl
-      );
-      if (success) {
+      const { error } = await createSubCategory({ category_id: selectedCategory, name: formData.name, description: formData.description });
+      if (!error) {
         alert('Created successfully');
         loadSubcategories();
         setShowForm(false);
+      } else {
+        alert(error);
       }
     }
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Delete this subcategory?')) {
-      const success = await categoryService.deleteSubCategory(id);
-      if (success) {
+      const { error } = await deleteSubCategoryApi(id);
+      if (!error) {
         alert('Deleted successfully');
         loadSubcategories();
+      } else {
+        alert(error);
       }
     }
   };
@@ -199,18 +184,6 @@ export const SubCategoryManagement: React.FC = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-600"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Image URL
-                </label>
-                <input
-                  type="text"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-600"
-                />
-              </div>
               <div className="flex gap-4">
                 <button
                   type="submit"
@@ -255,7 +228,7 @@ export const SubCategoryManagement: React.FC = () => {
                     Description
                   </th>
                   <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">
-                    Image
+                    Status
                   </th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">
                     Actions
@@ -270,7 +243,9 @@ export const SubCategoryManagement: React.FC = () => {
                       {sub.description || '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {sub.imageUrl ? '✓' : '—'}
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${sub.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {sub.is_active ? 'Active' : 'Inactive'}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <button

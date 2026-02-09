@@ -1,100 +1,35 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, ChevronDown, ChevronRight, Save, X, Upload } from 'lucide-react';
-import { logger } from '../../../utils/logger';
+import {
+  fetchCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory as deleteCategoryApi,
+  createSubCategory,
+  uploadCategoryImage,
+} from '../../../lib/productService';
 
 
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const uploadData = (_opts: any) => ({ result: Promise.resolve({}) });
-
-interface SubCategory {
+interface SubCategoryItem {
   id: string;
   name: string;
-  slug?: string;
   description?: string;
-  image_url?: string;
+  is_active?: boolean;
 }
 
-interface Category {
+interface CategoryItem {
   id: string;
-  categoryId: string;
   name: string;
-  slug?: string;
   description?: string;
   image_url?: string;
-  parent_id?: string;
-  sub_categories?: SubCategory[];
   is_active: boolean;
-  sort_order?: number;
+  display_order?: number;
+  sub_categories?: SubCategoryItem[];
   created_at?: string;
-  updated_at?: string;
 }
-
-const listCategoriesQuery = `
-  query ListCategories {
-    listCategories {
-      id
-      categoryId
-      name
-      slug
-      description
-      image_url
-      parent_id
-      sub_categories {
-        id
-        name
-        slug
-        description
-        image_url
-      }
-      is_active
-      sort_order
-      created_at
-      updated_at
-    }
-  }
-`;
-
-const createCategoryMutation = `
-  mutation CreateCategory($input: CategoryInput!) {
-    createCategory(input: $input) {
-      id
-      categoryId
-      name
-      slug
-      description
-      image_url
-      is_active
-      sub_categories {
-        id
-        name
-      }
-    }
-  }
-`;
-
-const updateCategoryMutation = `
-  mutation UpdateCategory($id: ID!, $input: CategoryInput!) {
-    updateCategory(id: $id, input: $input) {
-      id
-      categoryId
-      name
-      slug
-      description
-      image_url
-      is_active
-    }
-  }
-`;
-
-const deleteCategoryMutation = `
-  mutation DeleteCategory($id: ID!) {
-    deleteCategory(id: $id)
-  }
-`;
 
 export const CategoryManagement: React.FC = () => {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -108,50 +43,24 @@ export const CategoryManagement: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
-  const [newSubCategory, setNewSubCategory] = useState({ name: '', image_url: '' });
-  const [subImageFile, setSubImageFile] = useState<File | null>(null);
-  const [subImagePreview, setSubImagePreview] = useState<string>('');
+  const [subCategories, setSubCategories] = useState<SubCategoryItem[]>([]);
+  const [newSubCategory, setNewSubCategory] = useState({ name: '' });
 
   useEffect(() => {
-    fetchCategories();
+    loadCategories();
   }, []);
 
-  const fetchCategories = async () => {
+  const loadCategories = async () => {
     try {
       setLoading(true);
-      const result: any = await client.graphql({
-        query: listCategoriesQuery,
-        authMode: 'apiKey',
-      });
-      
-      if (result.data?.listCategories) {
-        setCategories(result.data.listCategories);
-        setError(null);
-      }
+      const { data, error: fetchErr } = await fetchCategories(false);
+      if (fetchErr) throw new Error(fetchErr);
+      setCategories(data as CategoryItem[]);
+      setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to load categories');
-      logger.error(err as Error, { context: 'Error fetching categories' });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const uploadImage = async (file: File, folder: string = 'categories'): Promise<string> => {
-    try {
-      const fileName = `${folder}/${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-      await uploadData({
-        key: fileName,
-        data: file,
-        options: {
-          contentType: file.type,
-        }
-      }).result;
-      
-      return `https://beauzead-store-images.s3.us-east-1.amazonaws.com/public/${fileName}`;
-    } catch (error) {
-      logger.error(error as Error, { context: 'Error uploading image' });
-      throw new Error('Failed to upload image');
     }
   };
 
@@ -171,22 +80,6 @@ export const CategoryManagement: React.FC = () => {
     }
   };
 
-  const handleSubImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError('Image size must be less than 5MB');
-        return;
-      }
-      if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file');
-        return;
-      }
-      setSubImageFile(file);
-      setSubImagePreview(URL.createObjectURL(file));
-    }
-  };
-
   const handleSave = async () => {
     try {
       if (!formData.name.trim()) {
@@ -194,49 +87,42 @@ export const CategoryManagement: React.FC = () => {
         return;
       }
 
-      if (!editingId && !imageFile) {
-        setError('Category image is required');
-        return;
-      }
-
       setUploadingImage(true);
       let imageUrl = formData.image_url;
-      
+
       if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
+        imageUrl = await uploadCategoryImage(imageFile);
       }
 
-      const input = {
-        name: formData.name,
-        slug: formData.name.toLowerCase().replace(/\s+/g, '-'),
-        image_url: imageUrl,
-        is_active: true,
-        sub_categories: subCategories,
-      };
-
       if (editingId) {
-        await client.graphql({
-          query: updateCategoryMutation,
-          authMode: 'apiKey',
-          variables: { id: editingId, input },
+        const { error: updateErr } = await updateCategory(editingId, {
+          name: formData.name,
+          image_url: imageUrl,
         });
+        if (updateErr) throw new Error(updateErr);
         setSuccess('Category updated successfully');
       } else {
-        await client.graphql({
-          query: createCategoryMutation,
-          authMode: 'apiKey',
-          variables: { input },
+        const { data: newCat, error: createErr } = await createCategory({
+          name: formData.name,
+          image_url: imageUrl,
         });
+        if (createErr) throw new Error(createErr);
+
+        // Create subcategories for the new category
+        if (newCat && subCategories.length > 0) {
+          for (const sub of subCategories) {
+            await createSubCategory({ category_id: newCat.id, name: sub.name, description: sub.description });
+          }
+        }
         setSuccess('Category created successfully');
       }
 
-      await fetchCategories();
+      await loadCategories();
       setShowForm(false);
       setEditingId(null);
       resetForm();
     } catch (err: any) {
       setError(err.message || 'Failed to save category');
-      logger.error(err as Error, { context: 'Error saving category' });
     } finally {
       setUploadingImage(false);
     }
@@ -246,41 +132,32 @@ export const CategoryManagement: React.FC = () => {
     if (!confirm('Are you sure you want to delete this category?')) return;
 
     try {
-      await client.graphql({
-        query: deleteCategoryMutation,
-        authMode: 'apiKey',
-        variables: { id: categoryId },
-      });
+      const { error: delErr } = await deleteCategoryApi(categoryId);
+      if (delErr) throw new Error(delErr);
       setSuccess('Category deleted successfully');
-      await fetchCategories();
+      await loadCategories();
     } catch (err: any) {
       setError(err.message || 'Failed to delete category');
-      logger.error(err as Error, { context: 'Error deleting category' });
     }
   };
 
-  const startEdit = (category: Category) => {
-    setEditingId(category.categoryId);
+  const startEdit = (cat: CategoryItem) => {
+    setEditingId(cat.id);
     setFormData({
-      name: category.name,
-      image_url: category.image_url || '',
+      name: cat.name,
+      image_url: cat.image_url || '',
     });
-    setImagePreview(category.image_url || '');
-    setSubCategories(category.sub_categories || []);
+    setImagePreview(cat.image_url || '');
+    setSubCategories(cat.sub_categories || []);
     setShowForm(true);
   };
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      image_url: '',
-    });
+    setFormData({ name: '', image_url: '' });
     setImageFile(null);
     setImagePreview('');
     setSubCategories([]);
-    setNewSubCategory({ name: '', image_url: '' });
-    setSubImageFile(null);
-    setSubImagePreview('');
+    setNewSubCategory({ name: '' });
   };
 
   const toggleExpand = (categoryId: string) => {
@@ -293,42 +170,22 @@ export const CategoryManagement: React.FC = () => {
     setExpandedCategories(newExpanded);
   };
 
-  const addSubCategory = async () => {
+  const addSubCategoryLocal = () => {
     if (!newSubCategory.name.trim()) {
       setError('Subcategory name is required');
       return;
     }
-    
-    if (!subImageFile) {
-      setError('Subcategory image is required');
-      return;
-    }
 
-    try {
-      setUploadingImage(true);
-      const imageUrl = await uploadImage(subImageFile, 'subcategories');
-      
-      const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      const subCat: SubCategory = {
-        id: uniqueId,
-        name: newSubCategory.name,
-        slug: newSubCategory.name.toLowerCase().replace(/\s+/g, '-'),
-        image_url: imageUrl,
-      };
-      
-      setSubCategories([...subCategories, subCat]);
-      setNewSubCategory({ name: '', image_url: '' });
-      setSubImageFile(null);
-      setSubImagePreview('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to add subcategory');
-    } finally {
-      setUploadingImage(false);
-    }
+    const subCat: SubCategoryItem = {
+      id: `temp-${Date.now()}`,
+      name: newSubCategory.name,
+    };
+
+    setSubCategories([...subCategories, subCat]);
+    setNewSubCategory({ name: '' });
   };
 
-  const removeSubCategory = (id: string) => {
+  const removeSubCategoryLocal = (id: string) => {
     setSubCategories(subCategories.filter(sub => sub.id !== id));
   };
 
@@ -385,15 +242,15 @@ export const CategoryManagement: React.FC = () => {
         <div className="divide-y divide-gray-200">
           {categories.length > 0 ? (
             categories.map((category) => (
-              <div key={category.categoryId} className="hover:bg-gray-50">
+              <div key={category.id} className="hover:bg-gray-50">
                 <div className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
                     <button
-                      onClick={() => toggleExpand(category.categoryId)}
+                      onClick={() => toggleExpand(category.id)}
                       className="text-gray-500 hover:text-gray-700"
                     >
                       {(category.sub_categories?.length || 0) > 0 ? (
-                        expandedCategories.has(category.categoryId) ? (
+                        expandedCategories.has(category.id) ? (
                           <ChevronDown size={20} />
                         ) : (
                           <ChevronRight size={20} />
@@ -441,7 +298,7 @@ export const CategoryManagement: React.FC = () => {
                     </button>
                     
                     <button
-                      onClick={() => handleDelete(category.categoryId)}
+                      onClick={() => handleDelete(category.id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
                     >
                       <Trash2 size={18} />
@@ -450,7 +307,7 @@ export const CategoryManagement: React.FC = () => {
                 </div>
 
                 {/* Subcategories */}
-                {expandedCategories.has(category.categoryId) &&
+                {expandedCategories.has(category.id) &&
                   category.sub_categories &&
                   category.sub_categories.length > 0 && (
                     <div className="pl-16 pr-4 pb-4 space-y-2">
@@ -548,13 +405,10 @@ export const CategoryManagement: React.FC = () => {
                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                     >
                       <div className="flex items-center gap-3">
-                        {sub.image_url && (
-                          <img src={sub.image_url} alt={sub.name} className="w-12 h-12 object-cover rounded" />
-                        )}
                         <h4 className="font-medium text-gray-900">{sub.name}</h4>
                       </div>
                       <button
-                        onClick={() => removeSubCategory(sub.id)}
+                        onClick={() => removeSubCategoryLocal(sub.id)}
                         className="text-red-600 hover:bg-red-50 p-2 rounded"
                       >
                         <Trash2 size={16} />
@@ -569,37 +423,15 @@ export const CategoryManagement: React.FC = () => {
                     type="text"
                     placeholder="Subcategory name *"
                     value={newSubCategory.name}
-                    onChange={(e) => setNewSubCategory({ ...newSubCategory, name: e.target.value })}
+                    onChange={(e) => setNewSubCategory({ name: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-black"
                   />
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Subcategory Image *
-                    </label>
-                    <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
-                      <div className="flex flex-col items-center justify-center">
-                        <Upload className="w-6 h-6 mb-1 text-gray-500" />
-                        <p className="text-xs text-gray-500">Click to upload image</p>
-                      </div>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleSubImageChange}
-                      />
-                    </label>
-                    {subImagePreview && (
-                      <img src={subImagePreview} alt="Sub Preview" className="mt-2 w-20 h-20 object-cover rounded" />
-                    )}
-                  </div>
-                  
                   <button
-                    onClick={addSubCategory}
-                    disabled={uploadingImage}
-                    className="w-full px-4 py-2 bg-gray-100 text-gray-900 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+                    onClick={addSubCategoryLocal}
+                    className="w-full px-4 py-2 bg-gray-100 text-gray-900 rounded-lg hover:bg-gray-200"
                   >
-                    {uploadingImage ? 'Uploading...' : 'Add Subcategory'}
+                    Add Subcategory
                   </button>
                 </div>
               </div>

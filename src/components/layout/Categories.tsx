@@ -1,10 +1,23 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { categories } from '../../data/mockData';
+import { fetchCategories } from '../../lib/productService';
+
+interface CategoryItem {
+  id: string;
+  name: string;
+  image_url?: string;
+}
 
 export const Categories: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+
+  useEffect(() => {
+    fetchCategories().then(({ data }) => {
+      setCategories(data.map((c: any) => ({ id: c.id, name: c.name, image_url: c.image_url })));
+    });
+  }, []);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
