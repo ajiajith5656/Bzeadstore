@@ -43,6 +43,11 @@ async function fetchProfile(supabaseUser: SupabaseUser, retries = 3): Promise<Us
       .single();
 
     if (error) {
+      // Don't retry on AbortError — the request was cancelled, retrying won't help
+      if (error.message?.includes('abort')) {
+        console.info('[Auth] fetchProfile aborted, using metadata fallback');
+        break;
+      }
       logger.error(new Error(`fetchProfile attempt ${i + 1}: ${error.message}`), { code: error.code });
       // Profile may not exist yet (trigger hasn't fired), wait and retry
       if (i < retries - 1) {
@@ -118,9 +123,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (err) {
         console.info('[Auth]', (err as Error).message);
-        // Clear any stale/expired token from localStorage so it doesn't
-        // block future signIn requests via the SDK's internal init lock.
-        try { await supabase.auth.signOut(); } catch { /* ignore */ }
+        // Don't call signOut() here — it aborts all in-flight SDK requests.
+        // Just remove the stale token from localStorage directly so the
+        // next signIn starts cleanly without the SDK's internal init lock.
+        try {
+          const storageKey = `sb-parladtqltuorczapzfm-auth-token`;
+          localStorage.removeItem(storageKey);
+        } catch { /* SSR / localStorage unavailable */ }
       } finally {
         if (mounted) setLoading(false);
       }

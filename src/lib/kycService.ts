@@ -88,10 +88,11 @@ export async function uploadKYCDocument(
       };
     }
 
-    // ── 2. Refresh auth session (prevents "signal is aborted") ──
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError || !sessionData?.session) {
-      logger.error(sessionError as unknown as Error, { context: 'KYC upload: session refresh failed' });
+    // ── 2. Get the current access token ─────────────────────────
+    // Use getSession() to grab the JWT. If the session is dead, fail fast.
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
       return { success: false, url: null, error: 'Your session has expired — please log in again.' };
     }
 
@@ -99,45 +100,45 @@ export async function uploadKYCDocument(
     const ext = file.name.split('.').pop() || 'pdf';
     const filePath = `${sellerId}/${docType}_${Date.now()}.${ext}`;
 
-    // ── 4. Upload with retry ────────────────────────────────────
+    // ── 4. Upload via direct fetch (bypasses Supabase SDK abort signals) ──
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/kyc-documents/${filePath}`;
+
     const MAX_RETRIES = 2;
-    let lastError: string = '';
+    let lastError = '';
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        // Exponential back-off: 1 s, 2 s
         await new Promise((r) => setTimeout(r, attempt * 1000));
-        logger.log(`KYC upload retry ${attempt}/${MAX_RETRIES} for ${docType}`);
       }
 
-      const { error: uploadError } = await supabase.storage
-        .from('kyc-documents')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: mimeType,
+      try {
+        const res = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'apikey': anonKey,
+            'Content-Type': mimeType,
+            'Cache-Control': '3600',
+            'x-upsert': 'true',
+          },
+          body: file,
         });
 
-      if (!uploadError) {
-        // Success — get a signed URL (bucket is private)
-        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-          .from('kyc-documents')
-          .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1-year signed URL
-
-        const url =
-          signedUrlData?.signedUrl ??
-          supabase.storage.from('kyc-documents').getPublicUrl(filePath).data?.publicUrl ??
-          filePath;
-
-        if (signedUrlError) {
-          logger.log(`Signed URL creation failed, falling back to path: ${signedUrlError.message}`);
+        if (res.ok) {
+          // Success — build the stored path URL (private bucket, use path reference)
+          const storedPath = `kyc-documents/${filePath}`;
+          return { success: true, url: storedPath, error: null };
         }
 
-        return { success: true, url, error: null };
+        const errBody = await res.json().catch(() => ({ message: res.statusText }));
+        lastError = errBody.message || errBody.error || `Upload failed (HTTP ${res.status})`;
+      } catch (fetchErr) {
+        lastError = (fetchErr as Error).message || 'Network error during upload';
       }
 
-      lastError = uploadError.message;
-      logger.error(uploadError as unknown as Error, {
+      logger.error(new Error(lastError), {
         context: `KYC doc upload failed (attempt ${attempt + 1}): ${docType}`,
       });
     }
