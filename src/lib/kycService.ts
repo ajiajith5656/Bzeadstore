@@ -194,6 +194,8 @@ export async function submitCompleteKYC(
     }
 
     // 2. Prepare the row (strip File objects, they don't go into the DB)
+    // Flatten business_address object into individual DB columns
+    const addr = kycData.business_address || {} as Record<string, string>;
     const row = {
       seller_id: resolvedSellerId,
       email: kycData.email,
@@ -205,7 +207,12 @@ export async function submitCompleteKYC(
       id_type: kycData.id_type,
       id_number: kycData.id_number,
       id_document_url: idDocUrl,
-      business_address: kycData.business_address as unknown as Record<string, unknown>,
+      business_street_address_1: (addr as any).street_address_1 || (addr as any).streetAddress1 || '',
+      business_street_address_2: (addr as any).street_address_2 || (addr as any).streetAddress2 || '',
+      business_city: (addr as any).city || '',
+      business_state: (addr as any).state || '',
+      business_postal_code: (addr as any).postal_code || (addr as any).postalCode || '',
+      business_country: (addr as any).country || kycData.country || '',
       address_proof_url: addressProofUrl,
       bank_holder_name: kycData.bank_holder_name,
       account_number: kycData.account_number,
