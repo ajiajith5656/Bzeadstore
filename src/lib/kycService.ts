@@ -35,9 +35,26 @@ export interface KYCRequirement {
 
 // ─── File Upload ─────────────────────────────────────────────────
 
+/** Allowed MIME types for KYC document uploads */
+const ALLOWED_KYC_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
+const MAX_KYC_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 /**
  * Upload a single file to the `kyc-documents` storage bucket.
  * Path: `<sellerId>/<docType>_<timestamp>.<ext>`
+ *
+ * Includes:
+ *  - Pre-upload auth-session refresh (prevents stale-token aborts)
+ *  - File validation (size + MIME type)
+ *  - Automatic retry (up to 2 retries with back-off)
  */
 export async function uploadKYCDocument(
   sellerId: string,
@@ -45,31 +62,87 @@ export async function uploadKYCDocument(
   docType: string
 ): Promise<KYCDocumentUploadResult> {
   try {
+    // ── 1. Validate inputs ──────────────────────────────────────
+    if (!sellerId) {
+      return { success: false, url: null, error: 'Seller ID is missing — please log in again.' };
+    }
+
+    if (!file || file.size === 0) {
+      return { success: false, url: null, error: 'No file selected or file is empty.' };
+    }
+
+    if (file.size > MAX_KYC_FILE_SIZE) {
+      return {
+        success: false,
+        url: null,
+        error: `File size (${(file.size / 1024 / 1024).toFixed(1)} MB) exceeds the 10 MB limit.`,
+      };
+    }
+
+    const mimeType = file.type || 'application/octet-stream';
+    if (!ALLOWED_KYC_MIME_TYPES.includes(mimeType)) {
+      return {
+        success: false,
+        url: null,
+        error: `File type "${mimeType}" is not supported. Please upload JPEG, PNG, PDF, or DOC/DOCX.`,
+      };
+    }
+
+    // ── 2. Refresh auth session (prevents "signal is aborted") ──
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData?.session) {
+      logger.error(sessionError as unknown as Error, { context: 'KYC upload: session refresh failed' });
+      return { success: false, url: null, error: 'Your session has expired — please log in again.' };
+    }
+
+    // ── 3. Build file path ──────────────────────────────────────
     const ext = file.name.split('.').pop() || 'pdf';
     const filePath = `${sellerId}/${docType}_${Date.now()}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('kyc-documents')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true,
-      });
+    // ── 4. Upload with retry ────────────────────────────────────
+    const MAX_RETRIES = 2;
+    let lastError: string = '';
 
-    if (uploadError) {
-      logger.error(uploadError as unknown as Error, { context: `KYC doc upload failed: ${docType}` });
-      return { success: false, url: null, error: uploadError.message };
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        // Exponential back-off: 1 s, 2 s
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+        logger.log(`KYC upload retry ${attempt}/${MAX_RETRIES} for ${docType}`);
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from('kyc-documents')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: mimeType,
+        });
+
+      if (!uploadError) {
+        // Success — get a signed URL (bucket is private)
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from('kyc-documents')
+          .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1-year signed URL
+
+        const url =
+          signedUrlData?.signedUrl ??
+          supabase.storage.from('kyc-documents').getPublicUrl(filePath).data?.publicUrl ??
+          filePath;
+
+        if (signedUrlError) {
+          logger.log(`Signed URL creation failed, falling back to path: ${signedUrlError.message}`);
+        }
+
+        return { success: true, url, error: null };
+      }
+
+      lastError = uploadError.message;
+      logger.error(uploadError as unknown as Error, {
+        context: `KYC doc upload failed (attempt ${attempt + 1}): ${docType}`,
+      });
     }
 
-    // Get public / signed URL
-    const { data: urlData } = supabase.storage
-      .from('kyc-documents')
-      .getPublicUrl(filePath);
-
-    return {
-      success: true,
-      url: urlData?.publicUrl ?? filePath,
-      error: null,
-    };
+    return { success: false, url: null, error: lastError };
   } catch (err) {
     logger.error(err as Error, { context: 'uploadKYCDocument' });
     return { success: false, url: null, error: (err as Error).message };
@@ -86,32 +159,42 @@ export async function submitCompleteKYC(
   sellerId: string
 ): Promise<KYCSubmitResult> {
   try {
+    // Ensure sellerId falls back to auth.uid() if not provided
+    let resolvedSellerId = sellerId;
+    if (!resolvedSellerId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      resolvedSellerId = user?.id || '';
+      if (!resolvedSellerId) {
+        return { success: false, error: 'Not authenticated — please log in again.' };
+      }
+    }
+
     // 1. Upload documents if present
     let idDocUrl = kycData.id_document_url || '';
     let addressProofUrl = kycData.address_proof_url || '';
     let bankStatementUrl = kycData.bank_statement_url || '';
 
     if (kycData.id_document_file) {
-      const res = await uploadKYCDocument(sellerId, kycData.id_document_file, 'id_document');
+      const res = await uploadKYCDocument(resolvedSellerId, kycData.id_document_file, 'id_document');
       if (!res.success) return { success: false, error: `ID document upload failed: ${res.error}` };
       idDocUrl = res.url || '';
     }
 
     if (kycData.address_proof_file) {
-      const res = await uploadKYCDocument(sellerId, kycData.address_proof_file, 'address_proof');
+      const res = await uploadKYCDocument(resolvedSellerId, kycData.address_proof_file, 'address_proof');
       if (!res.success) return { success: false, error: `Address proof upload failed: ${res.error}` };
       addressProofUrl = res.url || '';
     }
 
     if (kycData.bank_statement_file) {
-      const res = await uploadKYCDocument(sellerId, kycData.bank_statement_file, 'bank_statement');
+      const res = await uploadKYCDocument(resolvedSellerId, kycData.bank_statement_file, 'bank_statement');
       if (!res.success) return { success: false, error: `Bank statement upload failed: ${res.error}` };
       bankStatementUrl = res.url || '';
     }
 
     // 2. Prepare the row (strip File objects, they don't go into the DB)
     const row = {
-      seller_id: sellerId,
+      seller_id: resolvedSellerId,
       email: kycData.email,
       phone: kycData.phone,
       full_name: kycData.full_name,
