@@ -40,6 +40,7 @@ import { ReportsManagement } from './pages/admin/modules/ReportsManagement';
 import { AdminManagement } from './pages/admin/modules/AdminManagement';
 import { ProfilePage } from './pages/admin/modules/ProfilePage';
 import { SettingsPage } from './pages/admin/modules/SettingsPage';
+import { SellerKYCSubmissionManagement } from './pages/admin/modules/SellerKYCSubmissionManagement';
 import { ProductVariantManagement } from './pages/admin/modules/ProductVariantManagement';
 import SearchManagement from './pages/admin/modules/SearchManagement';
 import AuditLogs from './pages/admin/modules/AuditLogs';
@@ -227,6 +228,7 @@ function App() {
                     <Route path="/admin/audit-logs" element={<AuditLogs />} />
                     <Route path="/admin/health" element={<SystemHealth />} />
                     <Route path="/admin/addresses" element={<AdminAddressManagement />} />
+                    <Route path="/admin/seller-kyc" element={<SellerKYCSubmissionManagement />} />
                     
                     {/* Product Listing Wizard Routes */}
                     <Route path="/admin/products/new" element={<ProductListingLayout />}>

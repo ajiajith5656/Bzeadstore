@@ -46,6 +46,11 @@ const menuItems: MenuItem[] = [
     path: '/admin/sellers',
   },
   {
+    label: 'Seller KYC',
+    icon: <Shield size={20} />,
+    path: '/admin/seller-kyc',
+  },
+  {
     label: 'Products',
     icon: <Package size={20} />,
     path: '/admin/products',

@@ -99,3 +99,18 @@ See `supabase/setup.sql` for:
 5. Notifications
 6. Write Review
 7. Checkout / Stripe (later)
+
+---
+
+## TODO
+
+- [ ] Run SQL migrations (`01_countries.sql` → `07_admin_setup.sql`) on Supabase dashboard
+- [ ] Create `kyc-documents` storage bucket (private) in Supabase
+- [ ] Add RLS policy: sellers can only access their own `kyc-documents/{seller_id}/` folder
+- [ ] Wire remaining seller dashboard pages (Orders, Wallet, Analytics) to Supabase
+- [ ] Connect CartContext & WishlistContext to Supabase for cross-device sync
+- [ ] Build order flow end-to-end (Checkout → Payment → Order Confirmation → Tracking)
+- [ ] Add email notifications on KYC status change (approved / rejected)
+- [ ] Implement admin role guard on `/admin/*` routes (currently no auth check)
+- [ ] Add pagination to admin KYC table for large datasets
+- [ ] Product search & filtering with Supabase full-text search
