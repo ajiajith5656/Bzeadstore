@@ -101,8 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const initSession = async () => {
       try {
-        // Add timeout to prevent getSession from hanging indefinitely
-        // Supabase free tier cold starts can take 10-15s
+        // Timeout prevents getSession from hanging indefinitely on cold starts
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Auth session check timed out — continuing as guest')), 15000)
@@ -118,8 +117,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       } catch (err) {
-        // This is expected on first visit or cold starts — just log as info
         console.info('[Auth]', (err as Error).message);
+        // Clear any stale/expired token from localStorage so it doesn't
+        // block future signIn requests via the SDK's internal init lock.
+        try { await supabase.auth.signOut(); } catch { /* ignore */ }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -202,16 +203,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const signIn = async (email: string, password: string) => {
     try {
-      // Sign in with timeout — Supabase free tier can be slow on cold starts
-      const signInPromise = supabase.auth.signInWithPassword({
+      // No artificial timeout here — the actual network request is fast (~0.3s).
+      // The previous 20s timeout was falsely triggering because the SDK's internal
+      // init lock (from a stale token refresh) was blocking signIn from starting.
+      // Now that initSession clears stale tokens on timeout, signIn runs immediately.
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Sign in timed out. Please try again.')), 20000)
-      );
-
-      const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
 
       if (error) {
         // Map Supabase errors to user-friendly messages
