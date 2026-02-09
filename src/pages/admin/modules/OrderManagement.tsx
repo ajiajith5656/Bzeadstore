@@ -75,8 +75,7 @@ export const OrderManagement: React.FC = () => {
       const result = await adminApiService.processRefund(
         orderId, 
         amount,
-        'requested_by_customer',
-        'Admin-initiated refund'
+        'Admin-initiated refund: requested_by_customer'
       );
       if (result?.success) {
         setSuccess(`Refund processed successfully. Refund ID: ${result.refundId}`);

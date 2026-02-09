@@ -35,7 +35,7 @@ export const SearchManagement: React.FC = () => {
       logger.log('Search initiated', { query: searchQuery, filters: selectedFilters });
 
       const searchResults = await adminGlobalSearch(searchQuery, selectedFilters);
-      setResults(searchResults);
+      setResults(searchResults as SearchResult[]);
     } catch (error) {
       logger.error(error as Error, { context: 'Search failed' });
       alert('Search failed. Please try again.');

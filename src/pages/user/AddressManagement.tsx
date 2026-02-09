@@ -45,15 +45,19 @@ const UserAddressManagement: React.FC = () => {
       if (result.data) {
         setAddresses(result.data.map((a: any) => ({
           id: a.id,
-          name: a.name || a.full_name || '',
-          phone: a.phone || '',
-          addressLine1: a.address_line1 || a.street || '',
-          addressLine2: a.address_line2 || '',
+          fullName: a.name || a.full_name || '',
+          phoneNumber: a.phone || '',
+          email: a.email || '',
+          country: a.country || 'India',
+          streetAddress1: a.address_line1 || a.street || '',
+          streetAddress2: a.address_line2 || '',
           city: a.city || '',
           state: a.state || '',
-          pincode: a.pincode || a.postal_code || '',
-          type: a.type || a.address_type || 'home',
+          postalCode: a.pincode || a.postal_code || '',
+          addressType: (a.type || a.address_type || 'home') as 'home' | 'work' | 'other',
           isDefault: a.is_default || false,
+          createdAt: a.created_at || new Date().toISOString(),
+          updatedAt: a.updated_at || new Date().toISOString(),
         })));
       }
     } catch (err) {
@@ -78,14 +82,14 @@ const UserAddressManagement: React.FC = () => {
 
       if (editingId) {
         await updateUserAddress(editingId, {
-          name: data.name,
-          phone: data.phone,
-          address_line1: data.addressLine1,
-          address_line2: data.addressLine2,
+          name: data.fullName,
+          phone: data.phoneNumber,
+          address_line1: data.streetAddress1,
+          address_line2: data.streetAddress2,
           city: data.city,
           state: data.state,
-          postal_code: data.pincode,
-          address_type: data.type,
+          postal_code: data.postalCode,
+          address_type: data.addressType,
           is_default: data.isDefault,
         });
         setEditingId(null);
@@ -93,14 +97,14 @@ const UserAddressManagement: React.FC = () => {
         const isFirst = addresses.length === 0;
         await createUserAddress({
           user_id: userId,
-          name: data.name,
-          phone: data.phone,
-          address_line1: data.addressLine1,
-          address_line2: data.addressLine2,
+          name: data.fullName,
+          phone: data.phoneNumber,
+          address_line1: data.streetAddress1,
+          address_line2: data.streetAddress2,
           city: data.city,
           state: data.state,
-          postal_code: data.pincode,
-          address_type: data.type,
+          postal_code: data.postalCode,
+          address_type: data.addressType,
           is_default: data.isDefault || isFirst,
         });
       }

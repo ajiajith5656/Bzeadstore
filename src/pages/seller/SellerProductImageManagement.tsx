@@ -53,8 +53,6 @@ export const SellerProductImageManagement: React.FC = () => {
     if (!files) return;
 
     setUploading(true);
-    const maxOrder = images.length > 0 ? Math.max(...images.map((img) => img.displayOrder)) : 0;
-
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const isMain = images.length === 0 && i === 0;

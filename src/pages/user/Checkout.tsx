@@ -6,8 +6,8 @@ import { supabase } from '../../lib/supabase';
 
 // Payment integration — uses Supabase checkout_sessions/payment_intents tables
 // For production Stripe, replace this with real stripe-js calls
-const confirmPayment = async (orderId: string, paymentMethod: string) => {
-  const { data, error } = await supabase
+const confirmPayment = async (orderId: string, paymentMethod: string | Record<string, any>) => {
+  const { error } = await supabase
     .from('payment_intents')
     .insert({
       order_id: orderId,
@@ -76,7 +76,7 @@ const createPaymentIntent = async (params: {
 };
 
 // Minimal card element placeholder (production should use @stripe/react-stripe-js)
-const CardElement = ({ options }: any) => (
+const CardElement = ({ options: _options }: any) => (
   <div className="border rounded-lg p-3 bg-gray-50">
     <input
       type="text"

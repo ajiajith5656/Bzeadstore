@@ -40,8 +40,8 @@ export const MyOrders: React.FC = () => {
         // Query orders for current user from Supabase
         const result = await fetchOrdersByUser(userId);
 
-        if (result) {
-          const fetchedOrders = result.map((order: any) => {
+        if (result?.data) {
+          const fetchedOrders = result.data.map((order: any) => {
             let itemsCount = 0;
             try {
               const items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.order_items || order.items);
