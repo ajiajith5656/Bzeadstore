@@ -4,15 +4,18 @@ import {
   ArrowLeft, CheckCircle2, X, Loader2, Image, 
   FileStack, CreditCard, Landmark, Upload
 } from 'lucide-react';
-
-// TODO: Backend stubs — connect to your API
-const getKYCRequirementsByCountry = async (..._a: any[]) => [];
+import {
+  getKYCRequirementsByCountry,
+  uploadVerificationDocument,
+  finalizeVerificationSubmission,
+} from '../../lib/kycService';
 
 interface SellerVerifyUploadsProps {
   onBack: () => void;
   onComplete: () => void;
   sellerCountry?: string;
   sellerRegistrationType?: string;
+  sellerId: string;
 }
 
 interface UploadItem {
@@ -35,8 +38,12 @@ const MAX_SIZE_MB = 10;
 const SellerVerifyUploads: React.FC<SellerVerifyUploadsProps> = ({ 
   onBack, 
   onComplete,
-  sellerCountry = 'India'
+  sellerCountry = 'India',
+  sellerId,
 }) => {
+  // Map of docId -> uploaded file reference (kept until final submit)
+  const uploadedFiles = useRef<Record<string, File>>({});
+  const uploadedUrls = useRef<Record<string, string>>({});
   const [uploads, setUploads] = useState<UploadItem[]>([
     { id: 'seller-img', label: 'Seller Image', icon: <Image size={24} />, progress: 0, status: 'idle', fileName: null },
     { id: 'addr-f', label: 'Seller Address Proof – Front Side', icon: <FileStack size={24} />, progress: 0, status: 'idle', fileName: null },
@@ -93,46 +100,67 @@ const SellerVerifyUploads: React.FC<SellerVerifyUploadsProps> = ({
     }
 
     setErrorMessage(null);
-    simulateUpload(id, file.name);
+    handleRealUpload(id, file);
   };
 
-  const simulateUpload = (id: string, fileName: string) => {
+  const handleRealUpload = async (id: string, file: File) => {
+    // Keep a reference to the file for final submission
+    uploadedFiles.current[id] = file;
+
     setUploads(prev => prev.map(u => {
-      if (u.id === id) return { ...u, status: 'uploading', progress: 0, fileName };
+      if (u.id === id) return { ...u, status: 'uploading', progress: 0, fileName: file.name };
       return u;
     }));
 
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.floor(Math.random() * 20) + 5;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setUploads(prev => prev.map(u => {
-          if (u.id === id) return { ...u, status: 'completed', progress: 100 };
-          return u;
-        }));
-      } else {
+    const result = await uploadVerificationDocument(
+      sellerId,
+      id,
+      file,
+      (progress) => {
         setUploads(prev => prev.map(u => {
           if (u.id === id) return { ...u, progress };
           return u;
         }));
       }
-    }, 200);
+    );
+
+    if (result.success) {
+      uploadedUrls.current[id] = result.url || '';
+      setUploads(prev => prev.map(u => {
+        if (u.id === id) return { ...u, status: 'completed', progress: 100 };
+        return u;
+      }));
+    } else {
+      setErrorMessage(`Upload failed for document: ${result.error}`);
+      setUploads(prev => prev.map(u => {
+        if (u.id === id) return { ...u, status: 'idle', progress: 0, fileName: null };
+        return u;
+      }));
+    }
   };
 
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
-    // Simulate API call to storage and admin notification
-    await new Promise(r => setTimeout(r, 2500));
-    
-    const vId = `BZ-VRF-${Math.floor(100000 + Math.random() * 900000)}`;
-    setSubmissionId(vId);
-    
-    // Redirect after 2 seconds
-    setTimeout(() => {
-      onComplete();
-    }, 2000);
+    try {
+      const result = await finalizeVerificationSubmission(sellerId, uploadedUrls.current);
+
+      if (result.success) {
+        const vId = `BZ-VRF-${Math.floor(100000 + Math.random() * 900000)}`;
+        setSubmissionId(vId);
+
+        // Redirect after 2 seconds
+        setTimeout(() => {
+          onComplete();
+        }, 2000);
+      } else {
+        setErrorMessage(`Submission failed: ${result.error}`);
+      }
+    } catch (error) {
+      logger.error(error as Error, { context: 'handleFinalSubmit' });
+      setErrorMessage('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const isAllCompleted = uploads.every(u => u.status === 'completed');

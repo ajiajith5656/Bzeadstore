@@ -13,9 +13,7 @@ import {
   Home,
 } from 'lucide-react';
 import type { SellerKYC, UserAddress } from '../../types';
-
-// TODO: Backend stubs — connect to your API
-const submitCompleteKYC = async (..._a: any[]) => ({ success: true, error: null as string | null });
+import { submitCompleteKYC } from '../../lib/kycService';
 
 interface KYCStep {
   number: 1 | 2 | 3 | 4 | 5;
@@ -356,7 +354,7 @@ const SellerKYCVerification: React.FC<SellerKYCVerificationProps> = ({
         submitted_at: new Date().toISOString(),
       };
 
-      // Submit to S3 and DynamoDB via service
+      // Submit to Supabase via KYC service
       const result = await submitCompleteKYC(kycData, sellerId || '');
 
       if (result.success) {
