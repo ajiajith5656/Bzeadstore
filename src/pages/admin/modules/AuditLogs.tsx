@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, Filter, Download, Eye } from 'lucide-react';
+import { getAuditLogs } from '../../../lib/adminService';
 
 interface AuditLog {
   id: string;
@@ -17,65 +18,26 @@ export const AuditLogs: React.FC = () => {
   const [selectedAction, setSelectedAction] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [dateRange, setDateRange] = useState('7days');
+  const [logs, setLogs] = useState<AuditLog[]>([]);
 
-  // Mock data - TODO: Fetch from API
-  const logs: AuditLog[] = [
-    {
-      id: 'LOG-001',
-      timestamp: '2024-01-15 14:32:15',
-      admin: 'Admin User',
-      action: 'User Suspended',
-      resource: 'User',
-      resourceId: 'USR-123',
-      details: 'Account suspended for policy violation',
-      ipAddress: '192.168.1.100',
-      status: 'success'
-    },
-    {
-      id: 'LOG-002',
-      timestamp: '2024-01-15 13:45:22',
-      admin: 'Admin User',
-      action: 'Product Approved',
-      resource: 'Product',
-      resourceId: 'PROD-456',
-      details: 'Product successfully approved for listing',
-      ipAddress: '192.168.1.100',
-      status: 'success'
-    },
-    {
-      id: 'LOG-003',
-      timestamp: '2024-01-15 12:15:08',
-      admin: 'Support Admin',
-      action: 'Order Refund',
-      resource: 'Order',
-      resourceId: 'ORD-789',
-      details: 'Refund initiated for order cancellation',
-      ipAddress: '192.168.1.101',
-      status: 'success'
-    },
-    {
-      id: 'LOG-004',
-      timestamp: '2024-01-15 11:20:45',
-      admin: 'Admin User',
-      action: 'Seller KYC Rejected',
-      resource: 'Seller',
-      resourceId: 'SEL-234',
-      details: 'KYC documents rejected - incomplete information',
-      ipAddress: '192.168.1.100',
-      status: 'success'
-    },
-    {
-      id: 'LOG-005',
-      timestamp: '2024-01-15 10:10:30',
-      admin: 'Admin User',
-      action: 'Promotion Created',
-      resource: 'Promotion',
-      resourceId: 'PROMO-001',
-      details: 'New promotion created with 20% discount',
-      ipAddress: '192.168.1.100',
-      status: 'failed'
-    }
-  ];
+  useEffect(() => {
+    const loadLogs = async () => {
+      const result = await getAuditLogs({ limit: 50 });
+      const fetched = (result.logs || []).map((l: any) => ({
+        id: l.id,
+        timestamp: l.created_at || l.timestamp || '',
+        admin: l.admin_name || l.admin || 'Admin',
+        action: l.action || '',
+        resource: l.resource || '',
+        resourceId: l.resource_id || '',
+        details: l.details || '',
+        ipAddress: l.ip_address || '',
+        status: l.status || 'success',
+      }));
+      setLogs(fetched);
+    };
+    loadLogs();
+  }, []);
 
   const actions = [
     'User Suspended',

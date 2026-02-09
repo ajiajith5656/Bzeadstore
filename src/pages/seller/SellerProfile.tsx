@@ -2,15 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { logger } from '../../utils/logger';
 import { useAuth } from '../../contexts/AuthContext';
 import { Edit2, Save, X, Upload, Loader2, AlertCircle } from 'lucide-react';
-
-// TODO: Backend stubs — connect to your API
-const generateClient = () => ({ graphql: async (_opts: any): Promise<any> => ({ data: {} }) });
-const getSeller = '';
-const updateSeller = '';
+import { fetchSellerProfile, updateSellerProfile } from '../../lib/orderService';
 
 export const SellerProfile: React.FC = () => {
   const { user } = useAuth();
-  const client = generateClient();
   
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,21 +41,19 @@ export const SellerProfile: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response: any = await client.graphql({
-        query: getSeller,
-        variables: { id: sellerId }
-      });
+      const { data: seller, error: fetchError } = await fetchSellerProfile(sellerId!);
 
-      if (response.data?.getSeller) {
-        const seller = response.data.getSeller;
+      if (fetchError) {
+        setError('Failed to load seller profile');
+      } else if (seller) {
         setFormData({
-          business_name: seller.business_name || '',
-          description: seller.description || '',
+          business_name: seller.full_name || '',
+          description: '',
           email: seller.email || '',
           phone: seller.phone || '',
-          website: seller.website || '',
-          address: seller.address || '',
-          bank_details: seller.bank_details || {
+          website: '',
+          address: '',
+          bank_details: {
             bankName: '',
             accountNumber: '',
             ifscCode: ''
@@ -100,18 +93,20 @@ export const SellerProfile: React.FC = () => {
       setSaving(true);
       setError(null);
 
-      const response: any = await client.graphql({
-        query: updateSeller,
-        variables: {
-          input: {
-            id: sellerId,
-            ...formData
-          }
+      const { data: updatedProfile, error: saveError } = await updateSellerProfile(
+        sellerId!,
+        {
+          full_name: formData.business_name,
+          email: formData.email,
+          phone: formData.phone,
         }
-      });
+      );
 
-      if (response.data?.updateSeller) {
-        logger.log('Profile saved successfully', response.data.updateSeller);
+      if (saveError || !updatedProfile) {
+        setError('Failed to save profile');
+        alert('Error saving profile. Please try again.');
+      } else {
+        logger.log('Profile saved successfully', updatedProfile);
         setIsEditing(false);
         alert('Profile updated successfully!');
       }

@@ -5,11 +5,7 @@ import { Footer } from '../../components/layout/Footer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, Trash2, Loader2, Package, Tag, AlertCircle } from 'lucide-react';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const ordersByUser = '';
+import { getNotifications, markNotificationRead, deleteNotification } from '../../lib/adminService';
 
 interface Notification {
   id: string;
@@ -48,70 +44,19 @@ export const NotificationsPage: React.FC = () => {
         throw new Error('User not authenticated');
       }
 
-      // Fetch user's orders to generate notifications
-      const response: any = await client.graphql({
-        query: ordersByUser,
-        variables: {
-          user_id: userId,
-          sortDirection: 'DESC',
-          limit: 20,
-        },
-      });
+      // Fetch notifications from Supabase
+      const result = await getNotifications(userId);
+      const fetchedNotifications: Notification[] = (result.data || []).map((n: any) => ({
+        id: n.id,
+        title: n.title || 'Notification',
+        message: n.message || n.body || '',
+        type: (n.type || 'system') as 'order' | 'promotion' | 'system' | 'review',
+        timestamp: n.created_at || new Date().toISOString(),
+        read: n.is_read || false,
+        actionUrl: n.action_url,
+      }));
 
-      const orders = response.data?.ordersByUser?.items || [];
-      const generatedNotifications: Notification[] = [];
-
-      // Create notifications from orders
-      orders.forEach((order: any) => {
-        const baseTimestamp = new Date(order.created_at || new Date()).getTime();
-
-        // Order confirmation notification
-        generatedNotifications.push({
-          id: `order_${order.id}_confirm`,
-          title: 'Order Confirmed',
-          message: `Your order ${order.order_number} has been confirmed and is being processed.`,
-          type: 'order',
-          timestamp: new Date(baseTimestamp).toISOString(),
-          read: false,
-          actionUrl: `/orders/${order.id}`,
-        });
-
-        // Status-based notifications
-        if (order.status === 'shipped' || order.status === 'delivered') {
-          generatedNotifications.push({
-            id: `order_${order.id}_status`,
-            title: order.status === 'delivered' ? 'Order Delivered' : 'Order Shipped',
-            message:
-              order.status === 'delivered'
-                ? `Your order ${order.order_number} has been delivered.`
-                : `Your order ${order.order_number} is out for delivery. ${order.tracking_number ? `Tracking: ${order.tracking_number}` : ''}`,
-            type: 'order',
-            timestamp: new Date(baseTimestamp + 86400000).toISOString(),
-            read: order.status === 'delivered',
-            actionUrl: `/orders/${order.id}`,
-          });
-        }
-      });
-
-      // Add system notification
-      generatedNotifications.push({
-        id: 'system_maintenance',
-        title: 'Account Features',
-        message: 'Keep your profile and addresses updated for better shopping experience.',
-        type: 'system',
-        timestamp: new Date().toISOString(),
-        read: true,
-      });
-
-      // Mark older notifications as read
-      const sortedNotifications = generatedNotifications
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .map((notif, index) => ({
-          ...notif,
-          read: index > 4, // Last read are the oldest ones
-        }));
-
-      setNotifications(sortedNotifications);
+      setNotifications(fetchedNotifications);
     } catch (error) {
       logger.error(error as Error, { context: 'Failed to load notifications' });
     } finally {
@@ -119,13 +64,15 @@ export const NotificationsPage: React.FC = () => {
     }
   };
 
-  const handleMarkAsRead = (id: string) => {
+  const handleMarkAsRead = async (id: string) => {
+    await markNotificationRead(id);
     setNotifications(
       notifications.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    await deleteNotification(id);
     setNotifications(notifications.filter((n) => n.id !== id));
   };
 

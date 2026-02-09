@@ -3,14 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Star, Upload, Send, Loader2, Package, AlertCircle } from 'lucide-react';
 import logger from '../../utils/logger';
 import { useAuth } from '../../contexts/AuthContext';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const createReview = '';
-const getProduct = '';
-const getUrl = async (_opts: any) => ({ url: new URL('https://placeholder.local') });
-const uploadData = (_opts: any) => ({ result: Promise.resolve({}) });
+import { fetchProductById } from '../../lib/productService';
+import { createReview } from '../../lib/adminService';
+import { supabase } from '../../lib/supabase';
 
 interface Product {
   id: string;
@@ -47,13 +42,10 @@ export const WriteReview: React.FC = () => {
 
       try {
         setLoading(true);
-        const response: any = await client.graphql({
-          query: getProduct,
-          variables: { id: productId },
-        });
+        const productData = await fetchProductById(productId);
 
-        if (response.data?.getProduct) {
-          setProduct(response.data.getProduct);
+        if (productData) {
+          setProduct(productData as Product);
         } else {
           setError('Product not found');
         }
@@ -101,18 +93,16 @@ export const WriteReview: React.FC = () => {
       const uploadPromises = images.map(async (file, index) => {
         const timestamp = Date.now();
         const fileName = `${productId}-${timestamp}-${index}-${file.name}`;
-        const key = `reviews/${fileName}`;
+        const path = `reviews/${fileName}`;
 
-        await uploadData({
-          key,
-          data: file,
-          options: {
-            contentType: file.type,
-          },
-        }).result;
+        const { error } = await supabase.storage
+          .from('product-images')
+          .upload(path, file, { contentType: file.type });
+        
+        if (error) throw error;
 
-        const urlResult = await getUrl({ key });
-        return urlResult.url.toString();
+        const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+        return data.publicUrl;
       });
 
       return await Promise.all(uploadPromises);
@@ -153,7 +143,7 @@ export const WriteReview: React.FC = () => {
       // Upload images first (if any)
       const uploadedImageUrls = await uploadReviewImages();
 
-      // Submit review to backend
+      // Submit review to Supabase
       const reviewInput = {
         product_id: productId,
         user_id: userId,
@@ -161,26 +151,20 @@ export const WriteReview: React.FC = () => {
         title: title.trim(),
         comment: review.trim(),
         images: uploadedImageUrls,
-        is_verified_purchase: false, // TODO: Check if user actually purchased this product
       };
 
-      const response: any = await client.graphql({
-        query: createReview,
-        variables: {
-          input: reviewInput,
-        },
-      });
+      const result = await createReview(reviewInput);
 
-      if (response.data?.createReview) {
+      if (result.data) {
         logger.log('Review submitted successfully', {
-          reviewId: response.data.createReview.id,
+          reviewId: result.data.id,
           productId,
           rating,
         });
         alert('Review submitted successfully! Thank you for your feedback.');
         navigate(`/products/${productId}`);
       } else {
-        throw new Error('Failed to create review');
+        throw new Error(result.error || 'Failed to create review');
       }
     } catch (error) {
       logger.error(error as Error, { context: 'Error submitting review' });

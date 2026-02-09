@@ -3,40 +3,7 @@ import { Loading, ErrorMessage, SuccessMessage } from '../components/StatusIndic
 import { Eye, DollarSign } from 'lucide-react';
 import type { Order } from '../../../types';
 import { logger } from '../../../utils/logger';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async (..._a: any[]) => ({ orders: [], total: 0 }),
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({ success: true, refundId: '', error: null as any }),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 interface PaginationState {
   page: number;
@@ -68,11 +35,11 @@ export const OrderManagement: React.FC = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const result = await adminApiService.getAllOrders(
-        pagination.page,
-        pagination.limit,
-        statusFilter
-      );
+      const result = await adminApiService.getAllOrders({
+        limit: pagination.limit,
+        offset: (pagination.page - 1) * pagination.limit,
+        status: statusFilter || undefined,
+      });
       if (result) {
         setOrders(result.orders);
         setPagination((prev) => ({ ...prev, total: result.total }));

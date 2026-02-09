@@ -37,40 +37,7 @@ import {
   PieChart,
   X,
 } from 'lucide-react';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({} as any),
-  getDaybook: async (..._a: any[]) => ({ entries: [], total: 0 }),
-  getBankBook: async (..._a: any[]) => ({ entries: [], total: 0 }),
-  getAccountHeads: async () => [],
-  getExpenses: async (..._a: any[]) => ({ expenses: [], total: 0 }),
-  getSellerPayouts: async (..._a: any[]) => ({ payouts: [], total: 0 }),
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 type TabType = 'overview' | 'daybook' | 'bankbook' | 'expenses' | 'payouts' | 'settings';
 
@@ -157,29 +124,29 @@ export const AccountsManagement: React.FC = () => {
         costData,
       ] = await Promise.all([
         adminApiService.getAccountSummary(),
-        adminApiService.getDaybook(daybookPagination.page, daybookPagination.limit),
-        adminApiService.getBankBook(bankPagination.page, bankPagination.limit),
+        adminApiService.getDaybook({ limit: daybookPagination.limit, offset: (daybookPagination.page - 1) * daybookPagination.limit }),
+        adminApiService.getBankBook({ limit: bankPagination.limit, offset: (bankPagination.page - 1) * bankPagination.limit }),
         adminApiService.getAccountHeads(),
-        adminApiService.getExpenses(expensePagination.page, expensePagination.limit),
-        adminApiService.getSellerPayouts(payoutPagination.page, payoutPagination.limit),
+        adminApiService.getExpenses({ limit: expensePagination.limit, offset: (expensePagination.page - 1) * expensePagination.limit }),
+        adminApiService.getSellerPayouts({ limit: payoutPagination.limit, offset: (payoutPagination.page - 1) * payoutPagination.limit }),
         adminApiService.getMembershipPlans(),
         adminApiService.getTaxRules(),
         adminApiService.getPlatformCosts(),
       ]);
 
-      setSummary(summaryData);
-      setDaybook(daybookData?.entries || []);
+      setSummary(summaryData as unknown as AccountSummary);
+      setDaybook((daybookData?.entries || []) as DaybookEntry[]);
       setDaybookPagination((prev) => ({ ...prev, total: daybookData?.total || 0 }));
-      setBankBook(bankBookData?.entries || []);
+      setBankBook((bankBookData?.entries || []) as BankBookEntry[]);
       setBankPagination((prev) => ({ ...prev, total: bankBookData?.total || 0 }));
-      setAccountHeads(headsData || []);
-      setExpenses(expensesData?.expenses || []);
+      setAccountHeads((headsData?.data || []) as AccountHead[]);
+      setExpenses((expensesData?.expenses || []) as ExpenseEntry[]);
       setExpensePagination((prev) => ({ ...prev, total: expensesData?.total || 0 }));
-      setPayouts(payoutsData?.payouts || []);
+      setPayouts((payoutsData?.payouts || []) as SellerPayout[]);
       setPayoutPagination((prev) => ({ ...prev, total: payoutsData?.total || 0 }));
-      setMemberships(membershipsData || []);
-      setTaxRules(taxData || []);
-      setPlatformCosts(costData || []);
+      setMemberships((membershipsData?.data || []) as MembershipPlan[]);
+      setTaxRules((taxData?.data || []) as TaxRule[]);
+      setPlatformCosts((costData?.data || []) as PlatformCost[]);
       setError(null);
     } catch (err) {
       setError('Failed to load account data');

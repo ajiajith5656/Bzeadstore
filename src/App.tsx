@@ -24,6 +24,10 @@ import SellerLogin from './pages/seller/SellerLogin';
 import SellerForgotPassword from './pages/seller/SellerForgotPassword';
 import AnalyticsDashboard from './pages/seller/AnalyticsDashboard';
 import SellerProfile from './pages/seller/SellerProfile';
+import { SellerProductListingWrapper } from './pages/seller/SellerProductListingWrapper';
+import { SellerOrderManagementWrapper } from './pages/seller/SellerOrderManagementWrapper';
+import { SellerWalletWrapper } from './pages/seller/SellerWalletWrapper';
+import { SellerVerificationWrapper } from './pages/seller/SellerVerificationWrapper';
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { AdminOverview } from './pages/admin/modules/AdminOverview';
 import { UserManagement } from './pages/admin/modules/UserManagement';
@@ -113,7 +117,8 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // SELLER ROUTES: Allow seller OR admin
     if (path.startsWith('/seller/dashboard') || path.startsWith('/seller/products') || 
         path.startsWith('/seller/orders') || path.startsWith('/seller/wallet') ||
-        path.startsWith('/seller/analytics') || path.startsWith('/seller/profile')) {
+        path.startsWith('/seller/analytics') || path.startsWith('/seller/profile') ||
+        path.startsWith('/seller/verify')) {
       if (authRole !== 'seller' && authRole !== 'admin') {
         window.location.href = '/seller/login';
       }
@@ -200,6 +205,10 @@ function App() {
                   <Route path="/seller/analytics" element={<AnalyticsDashboard />} />
                   <Route path="/seller/profile" element={<SellerProfile />} />
                   <Route path="/seller/dashboard" element={<SellerDashboardWrapper />} />
+                  <Route path="/seller/products" element={<SellerProductListingWrapper />} />
+                  <Route path="/seller/orders" element={<SellerOrderManagementWrapper />} />
+                  <Route path="/seller/wallet" element={<SellerWalletWrapper />} />
+                  <Route path="/seller/verify" element={<SellerVerificationWrapper />} />
                   
                   {/* Admin Routes */}
                   <Route path="/admin/login" element={<Navigate to="/seller/login" replace />} />

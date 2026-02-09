@@ -3,40 +3,7 @@ import { Loading, ErrorMessage } from '../components/StatusIndicators';
 import { Flag, Trash2 } from 'lucide-react';
 import type { Review } from '../../../types';
 import { logger } from '../../../utils/logger';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async (..._a: any[]) => ({ reviews: [], total: 0 }),
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 interface PaginationState {
   page: number;
@@ -62,7 +29,10 @@ export const ReviewManagement: React.FC = () => {
   const fetchReviews = async () => {
     try {
       setLoading(true);
-      const result = await adminApiService.getAllReviews(pagination.page, pagination.limit);
+      const result = await adminApiService.getAllReviews({
+        limit: pagination.limit,
+        offset: (pagination.page - 1) * pagination.limit,
+      });
       if (result) {
         setReviews(result.reviews);
         setPagination((prev) => ({ ...prev, total: result.total }));

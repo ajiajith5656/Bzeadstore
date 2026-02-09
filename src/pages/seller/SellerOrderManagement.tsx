@@ -8,12 +8,7 @@ import {
   Search, Filter, Download, Eye, AlertCircle, PackageCheck, Loader2
 } from 'lucide-react';
 import { formatPrice } from '../../constants';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const ordersBySeller = '';
-const updateOrder = '';
+import { fetchOrdersBySeller, updateOrderStatus } from '../../lib/orderService';
 
 interface Order {
   id: string;
@@ -49,27 +44,23 @@ const SellerOrderManagement: React.FC<SellerOrderManagementProps> = ({ onLogout,
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
-  // Fetch orders from GraphQL
+  // Fetch orders from Supabase
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        // Get sellerId from user data
         const sellerId = (user as any)?.attributes?.sub || user?.id || sellerEmail;
         
-        const response: any = await client.graphql({
-          query: ordersBySeller,
-          variables: {
-            seller_id: sellerId,
-            sortDirection: 'DESC',
-            limit: 100
-          }
-        });
+        const { data, error: fetchError } = await fetchOrdersBySeller(sellerId, { limit: 100 });
 
-        if (response.data?.ordersBySeller?.items) {
-          setOrders(response.data.ordersBySeller.items);
+        if (fetchError) {
+          setError('Failed to load orders. Please try again.');
+        } else {
+          // Map order_items from joined data to items field
+          const mapped = data.map((o: any) => ({ ...o, items: o.order_items || o.items || [] }));
+          setOrders(mapped);
         }
       } catch (err) {
         logger.error('Failed to fetch orders:', err as Record<string, any>);
@@ -132,19 +123,20 @@ const SellerOrderManagement: React.FC<SellerOrderManagementProps> = ({ onLogout,
         showActionModal === 'ship' ? 'shipped' :
         showActionModal === 'deliver' ? 'delivered' : selectedOrder.status;
 
-      const response: any = await client.graphql({
-        query: updateOrder,
-        variables: {
-          input: {
-            id: selectedOrder.id,
-            status: newStatus,
-            tracking_number: trackingId || undefined
-          }
-        }
-      });
+      const updatePayload: Record<string, unknown> = { status: newStatus };
+      if (trackingId) updatePayload.tracking_number = trackingId;
+      if (newStatus === 'delivered') updatePayload.completed_at = new Date().toISOString();
 
-      if (response.data?.updateOrder) {
-        setOrders(orders.map(o => o.id === selectedOrder.id ? response.data.updateOrder : o));
+      const { data: updatedOrder, error: updateError } = await updateOrderStatus(
+        selectedOrder.id,
+        updatePayload as any
+      );
+
+      if (updateError || !updatedOrder) {
+        alert('Failed to update order. Please try again.');
+      } else {
+        const mapped = { ...updatedOrder, items: (updatedOrder as any).order_items || [] };
+        setOrders(orders.map(o => o.id === selectedOrder.id ? mapped : o));
         setShowActionModal(null);
         setSelectedOrder(null);
         setTrackingId('');

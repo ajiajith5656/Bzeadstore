@@ -1,14 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { TrendingUp, BarChart3, PieChart, Calendar, Loader2, AlertCircle } from 'lucide-react';
-
-// TODO: Backend stubs — connect to your API
-const generateClient = () => ({ graphql: async (_opts: any): Promise<any> => ({ data: {} }) });
-const ordersBySeller = '';
+import { fetchOrdersBySeller } from '../../lib/orderService';
 
 export const AnalyticsDashboard: React.FC = () => {
   const { user } = useAuth();
-  const client = generateClient();
   
   const [dateRange, setDateRange] = useState('monthly');
   const [loading, setLoading] = useState(true);
@@ -29,17 +25,12 @@ export const AnalyticsDashboard: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response: any = await client.graphql({
-        query: ordersBySeller,
-        variables: {
-          seller_id: sellerId,
-          sortDirection: 'DESC',
-          limit: 100
-        }
-      });
+      const { data, error: fetchError } = await fetchOrdersBySeller(sellerId!, { limit: 100 });
 
-      if (response.data?.ordersBySeller?.items) {
-        setOrders(response.data.ordersBySeller.items);
+      if (fetchError) {
+        setError('Failed to load analytics');
+      } else {
+        setOrders(data);
       }
     } catch (err) {
       console.error('Error fetching analytics:', err);

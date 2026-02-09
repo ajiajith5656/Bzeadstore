@@ -8,12 +8,12 @@ import type { Address } from '../../components/AddressForm';
 import { MapPin, Edit2, Trash2, Plus, ArrowLeft, Home, Briefcase, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import logger from '../../utils/logger';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const getUser = '';
-const updateUserMutation = '';
+import {
+  getUserAddresses,
+  createUserAddress,
+  updateUserAddress,
+  deleteUserAddress as deleteAddressApi,
+} from '../../lib/adminService';
 
 const UserAddressManagement: React.FC = () => {
   const navigate = useNavigate();
@@ -38,22 +38,23 @@ const UserAddressManagement: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
-      if (!user && !currentAuthUser) {
-        navigate('/login');
-        return;
-      }
-
       const userId = user?.id || currentAuthUser?.username;
-      const response: any = await client.graphql({
-        query: getUser,
-        variables: { id: userId },
-      });
+      if (!userId) { navigate('/login'); return; }
 
-      if (response.data?.getUser?.preferences) {
-        const prefs = JSON.parse(response.data.getUser.preferences);
-        if (prefs.addresses && Array.isArray(prefs.addresses)) {
-          setAddresses(prefs.addresses);
-        }
+      const result = await getUserAddresses(userId);
+      if (result.data) {
+        setAddresses(result.data.map((a: any) => ({
+          id: a.id,
+          name: a.name || a.full_name || '',
+          phone: a.phone || '',
+          addressLine1: a.address_line1 || a.street || '',
+          addressLine2: a.address_line2 || '',
+          city: a.city || '',
+          state: a.state || '',
+          pincode: a.pincode || a.postal_code || '',
+          type: a.type || a.address_type || 'home',
+          isDefault: a.is_default || false,
+        })));
       }
     } catch (err) {
       logger.error(err as Error, { context: 'Failed to load addresses' });
@@ -63,34 +64,8 @@ const UserAddressManagement: React.FC = () => {
     }
   };
 
-  const saveAddressesToBackend = async (updatedAddresses: Address[]) => {
-    try {
-      const userId = user?.id || currentAuthUser?.username;
-      if (!userId) throw new Error('User not authenticated');
-
-      const preferences = {
-        addresses: updatedAddresses,
-      };
-
-      await client.graphql({
-        query: updateUserMutation,
-        variables: {
-          input: {
-            id: userId,
-            preferences: JSON.stringify(preferences),
-          },
-        },
-      });
-
-      setAddresses(updatedAddresses);
-      setSuccessMessage('Addresses updated successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      logger.error(err as Error, { context: 'Failed to save addresses' });
-      setError('Failed to save addresses. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
+  const saveAddressesToBackend = async (_updatedAddresses: Address[]) => {
+    // This is now handled individually per address
   };
 
   const handleAddAddress = async (data: Address) => {
@@ -98,30 +73,47 @@ const UserAddressManagement: React.FC = () => {
       setIsSaving(true);
       setError(null);
 
-      let updatedAddresses: Address[];
+      const userId = user?.id || currentAuthUser?.username;
+      if (!userId) throw new Error('User not authenticated');
 
       if (editingId) {
-        updatedAddresses = addresses.map((a) => (a.id === editingId ? data : a));
+        await updateUserAddress(editingId, {
+          name: data.name,
+          phone: data.phone,
+          address_line1: data.addressLine1,
+          address_line2: data.addressLine2,
+          city: data.city,
+          state: data.state,
+          postal_code: data.pincode,
+          address_type: data.type,
+          is_default: data.isDefault,
+        });
         setEditingId(null);
       } else {
-        const newAddress: Address = {
-          ...data,
-          id: `addr_${Date.now()}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        updatedAddresses = [...addresses, newAddress];
-
-        // If this is the first address, make it default
-        if (updatedAddresses.length === 1) {
-          updatedAddresses[0].isDefault = true;
-        }
+        const isFirst = addresses.length === 0;
+        await createUserAddress({
+          user_id: userId,
+          name: data.name,
+          phone: data.phone,
+          address_line1: data.addressLine1,
+          address_line2: data.addressLine2,
+          city: data.city,
+          state: data.state,
+          postal_code: data.pincode,
+          address_type: data.type,
+          is_default: data.isDefault || isFirst,
+        });
       }
 
-      await saveAddressesToBackend(updatedAddresses);
+      await loadAddresses();
       setShowForm(false);
+      setSuccessMessage(editingId ? 'Address updated!' : 'Address added!');
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       logger.error(err as Error, { context: 'Failed to add address' });
+      setError('Failed to save address');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -134,14 +126,8 @@ const UserAddressManagement: React.FC = () => {
       setIsSaving(true);
       setError(null);
 
-      const updatedAddresses = addresses.filter((a) => a.id !== id);
-
-      // If deleted address was default, make first remaining address default
-      if (addresses.find((a) => a.id === id)?.isDefault && updatedAddresses.length > 0) {
-        updatedAddresses[0].isDefault = true;
-      }
-
-      await saveAddressesToBackend(updatedAddresses);
+      await deleteAddressApi(id);
+      await loadAddresses();
     } catch (err) {
       logger.error(err as Error, { context: 'Failed to delete address' });
     }

@@ -1,29 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { Upload, Trash2, Eye, Loader2, GripVertical } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  getProductImages as fetchProductImages,
+  uploadProductImageFile,
+} from '../../lib/adminService';
+import { supabase } from '../../lib/supabase';
 
-// TODO: Connect to your backend image service
 interface ProductImage { id: string; product_id: string; image_url: string; imageUrl: string; is_main: boolean; isMainImage: boolean; display_order: number; displayOrder: number; }
-const getProductImages = async (_pid: string): Promise<ProductImage[]> => [];
-const createProductImage = async (..._a: any[]): Promise<ProductImage> => ({ id: `img_${Date.now()}`, product_id: '', image_url: '', imageUrl: '', is_main: false, isMainImage: false, display_order: 0, displayOrder: 0 });
-const deleteProductImage = async (..._a: any[]): Promise<boolean> => true;
-const uploadProductImageFile = async (..._a: any[]): Promise<string> => '';
-const setMainProductImage = async (..._a: any[]): Promise<boolean> => true;
-const reorderProductImages = async (..._a: any[]): Promise<void> => {};
 
 export const SellerProductImageManagement: React.FC = () => {
   const { user } = useAuth();
-  const [sellerProducts] = useState<any[]>([
-    { id: 'p1', name: 'My Product 1' },
-    { id: 'p2', name: 'My Product 2' },
-  ]);
-  const [selectedProductId, setSelectedProductId] = useState<string>('p1');
+  const [sellerProducts, setSellerProducts] = useState<any[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [images, setImages] = useState<ProductImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
   const sellerId = user?.id || 'seller1';
+
+  // Load seller's products from Supabase
+  useEffect(() => {
+    const loadSellerProducts = async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('id, name')
+        .eq('seller_id', sellerId)
+        .order('name')
+        .limit(50);
+      setSellerProducts(data || []);
+      if (data && data.length > 0) setSelectedProductId(data[0].id);
+    };
+    loadSellerProducts();
+  }, [sellerId]);
 
   useEffect(() => {
     if (selectedProductId) {
@@ -33,7 +43,7 @@ export const SellerProductImageManagement: React.FC = () => {
 
   const loadImages = async () => {
     setLoading(true);
-    const imageList = await getProductImages(selectedProductId);
+    const imageList = await fetchProductImages(selectedProductId);
     setImages(imageList.sort((a, b) => a.displayOrder - b.displayOrder));
     setLoading(false);
   };
@@ -52,15 +62,25 @@ export const SellerProductImageManagement: React.FC = () => {
       const imageUrl = await uploadProductImageFile(selectedProductId, file, sellerId);
 
       if (imageUrl) {
-        await createProductImage(
-          selectedProductId,
-          imageUrl,
-          imageUrl,
-          maxOrder + i + 1,
-          isMain,
-          sellerId,
-          file.name
-        );
+        // Update product images array in DB
+        const { data: prod } = await supabase
+          .from('products')
+          .select('images, image_url')
+          .eq('id', selectedProductId)
+          .single();
+        
+        const existingImages = (prod?.images || []) as string[];
+        existingImages.push(imageUrl);
+
+        const updates: Record<string, any> = { images: existingImages };
+        if (isMain || !prod?.image_url) {
+          updates.image_url = imageUrl;
+        }
+
+        await supabase
+          .from('products')
+          .update(updates)
+          .eq('id', selectedProductId);
       }
     }
 
@@ -70,21 +90,27 @@ export const SellerProductImageManagement: React.FC = () => {
 
   const handleDelete = async (imageId: string) => {
     if (window.confirm('Delete this image?')) {
-      const success = await deleteProductImage(imageId);
-      if (success) {
-        loadImages();
+      const img = images.find((i) => i.id === imageId);
+      if (img) {
+        const { data: prod } = await supabase
+          .from('products')
+          .select('images')
+          .eq('id', selectedProductId)
+          .single();
+        const updatedImages = ((prod?.images || []) as string[]).filter((u: string) => u !== img.image_url);
+        await supabase.from('products').update({ images: updatedImages }).eq('id', selectedProductId);
       }
+      loadImages();
     }
   };
 
   const handleSetMain = async (imageId: string) => {
-    const oldMainImage = images.find((img) => img.isMainImage);
-    const success = await setMainProductImage(
-      selectedProductId,
-      imageId,
-      oldMainImage?.id
-    );
-    if (success) {
+    const img = images.find((i) => i.id === imageId);
+    if (img) {
+      await supabase
+        .from('products')
+        .update({ image_url: img.image_url })
+        .eq('id', selectedProductId);
       loadImages();
     }
   };
@@ -109,12 +135,21 @@ export const SellerProductImageManagement: React.FC = () => {
       newImages[draggedIndex],
     ];
 
-    const updates = newImages.map((img, idx) => ({
-      id: img.id,
+    // Update display_order in the product's images JSONB array
+    const reordered = newImages.map((img, idx) => ({
+      ...img,
+      display_order: idx + 1,
       displayOrder: idx + 1,
     }));
-
-    await reorderProductImages(updates);
+    const jsonImages = reordered.map((img) => ({
+      url: img.image_url || img.imageUrl,
+      is_main: img.is_main || img.isMainImage,
+      display_order: img.display_order,
+    }));
+    await supabase
+      .from('products')
+      .update({ images: jsonImages })
+      .eq('id', selectedProductId);
     loadImages();
     setDraggedId(null);
   };

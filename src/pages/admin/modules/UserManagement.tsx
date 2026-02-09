@@ -3,63 +3,7 @@ import { Loading } from '../components/StatusIndicators';
 import { Search, Trash2, Ban, X } from 'lucide-react';
 import type { User } from '../../../types';
 import { logger } from '../../../utils/logger';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-
-const listUsersQuery = `
-  query ListUsers($limit: Int, $nextToken: String) {
-    listUsers(limit: $limit, nextToken: $nextToken) {
-      items {
-        id
-        userId
-        email
-        first_name
-        last_name
-        phone
-        address
-        profile_type
-        avatar_url
-        is_verified
-        is_banned
-        total_purchases
-        cancellations
-        created_at
-        updated_at
-      }
-      nextToken
-    }
-  }
-`;
-
-const banUserMutation = `
-  mutation BanUser($id: ID!) {
-    banUser(id: $id) {
-      id
-      userId
-      is_banned
-      updated_at
-    }
-  }
-`;
-
-const unbanUserMutation = `
-  mutation UnbanUser($id: ID!) {
-    unbanUser(id: $id) {
-      id
-      userId
-      is_banned
-      updated_at
-    }
-  }
-`;
-
-const deleteUserMutation = `
-  mutation DeleteUser($id: ID!) {
-    deleteUser(id: $id)
-  }
-`;
+import * as adminApi from '../../../lib/adminService';
 
 interface PaginationState {
   page: number;
@@ -74,7 +18,6 @@ export const UserManagement: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProfileType, setSelectedProfileType] = useState<string>('');
-  const [nextToken, setNextToken] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
     limit: 50,
@@ -90,20 +33,15 @@ export const UserManagement: React.FC = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const result: any = await client.graphql({
-        query: listUsersQuery,
-        authMode: 'apiKey',
-        variables: {
-          limit: pagination.limit,
-          nextToken: nextToken,
-        },
+      const result = await adminApi.getAllUsers({
+        limit: pagination.limit,
+        offset: (pagination.page - 1) * pagination.limit,
+        search: searchTerm || undefined,
       });
 
-      if (result.data?.listUsers) {
-        const items = result.data.listUsers.items || [];
-        setUsers(items);
-        setNextToken(result.data.listUsers.nextToken);
-        setPagination((prev) => ({ ...prev, total: items.length }));
+      if (result) {
+        setUsers(result.users as User[]);
+        setPagination((prev) => ({ ...prev, total: result.total }));
         setError(null);
       }
     } catch (err: any) {
@@ -117,11 +55,7 @@ export const UserManagement: React.FC = () => {
   const handleBanUser = async (userId: string) => {
     try {
       setActionLoading(userId);
-      await client.graphql({
-        query: banUserMutation,
-        authMode: 'apiKey',
-        variables: { id: userId },
-      });
+      await adminApi.banUser(userId);
       setSuccess('User banned successfully');
       await fetchUsers();
     } catch (err: any) {
@@ -135,11 +69,7 @@ export const UserManagement: React.FC = () => {
   const handleUnbanUser = async (userId: string) => {
     try {
       setActionLoading(userId);
-      await client.graphql({
-        query: unbanUserMutation,
-        authMode: 'apiKey',
-        variables: { id: userId },
-      });
+      await adminApi.unbanUser(userId);
       setSuccess('User unbanned successfully');
       await fetchUsers();
     } catch (err: any) {
@@ -153,11 +83,7 @@ export const UserManagement: React.FC = () => {
   const handleDeleteUser = async (userId: string) => {
     try {
       setActionLoading(userId);
-      await client.graphql({
-        query: deleteUserMutation,
-        authMode: 'apiKey',
-        variables: { id: userId },
-      });
+      await adminApi.deleteUser(userId);
       setSuccess('User deleted successfully');
       await fetchUsers();
     } catch (err: any) {

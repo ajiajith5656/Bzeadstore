@@ -3,40 +3,7 @@ import { logger } from '../../../utils/logger';
 import { Loading, ErrorMessage, SuccessMessage } from '../components/StatusIndicators';
 import { Eye } from 'lucide-react';
 import type { Complaint } from '../../../types';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async (..._a: any[]) => ({ complaints: [], total: 0 }),
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 interface PaginationState {
   page: number;
@@ -68,7 +35,11 @@ export const ComplaintManagement: React.FC = () => {
   const fetchComplaints = async () => {
     try {
       setLoading(true);
-      const result = await adminApiService.getAllComplaints(pagination.page, pagination.limit, statusFilter);
+      const result = await adminApiService.getAllComplaints({
+        limit: pagination.limit,
+        offset: (pagination.page - 1) * pagination.limit,
+        status: statusFilter || undefined,
+      });
       if (result) {
         setComplaints(result.complaints);
         setPagination((prev) => ({ ...prev, total: result.total }));

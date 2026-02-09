@@ -2,15 +2,97 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, Loader2, CheckCircle2, ArrowLeft } from 'lucide-react';
 import type { OrderData } from '../../types';
+import { supabase } from '../../lib/supabase';
 
-// TODO: Backend stubs — connect to your API
-const CardElement = (_props: any) => null;
-const Elements = ({ children }: any) => children;
-const confirmPayment = async (..._a: any[]) => ({ success: true, orderId: 'ord_stub', status: 'succeeded', error: null as string | null });
-const createPaymentIntent = async (..._a: any[]) => ({ clientSecret: '', success: true, paymentIntentId: 'pi_stub', error: null as string | null });
+// Payment integration — uses Supabase checkout_sessions/payment_intents tables
+// For production Stripe, replace this with real stripe-js calls
+const confirmPayment = async (orderId: string, paymentMethod: string) => {
+  const { data, error } = await supabase
+    .from('payment_intents')
+    .insert({
+      order_id: orderId,
+      status: 'succeeded',
+      payment_method: paymentMethod,
+    })
+    .select('id')
+    .single();
+  if (error) return { success: false, orderId, status: 'failed', error: error.message };
+  return { success: true, orderId, status: 'succeeded', error: null as string | null };
+};
+
+const createPaymentIntent = async (params: {
+  customerId: string;
+  customerEmail: string;
+  customerName: string;
+  items: any[];
+  totalAmount: number;
+  shippingAddress: any;
+}) => {
+  // Create order + checkout session in Supabase
+  const { data: order, error: orderErr } = await supabase
+    .from('orders')
+    .insert({
+      user_id: params.customerId,
+      status: 'pending',
+      total_amount: params.totalAmount,
+      shipping_address: params.shippingAddress,
+      order_number: `ORD-${Date.now()}`,
+    })
+    .select('id')
+    .single();
+
+  if (orderErr || !order) {
+    return { clientSecret: '', success: false, paymentIntentId: '', error: orderErr?.message || 'Failed to create order' };
+  }
+
+  // Insert order items
+  const orderItems = params.items.map((item) => ({
+    order_id: order.id,
+    product_id: item.productId,
+    product_name: item.productName,
+    quantity: item.quantity,
+    price: item.price,
+  }));
+  await supabase.from('order_items').insert(orderItems);
+
+  // Create checkout session
+  const { data: session } = await supabase
+    .from('checkout_sessions')
+    .insert({
+      order_id: order.id,
+      customer_email: params.customerEmail,
+      amount: params.totalAmount,
+      status: 'open',
+    })
+    .select('id')
+    .single();
+
+  return {
+    clientSecret: session?.id || '',
+    success: true,
+    paymentIntentId: order.id,
+    error: null as string | null,
+  };
+};
+
+// Minimal card element placeholder (production should use @stripe/react-stripe-js)
+const CardElement = ({ options }: any) => (
+  <div className="border rounded-lg p-3 bg-gray-50">
+    <input
+      type="text"
+      placeholder="Card number (demo mode)"
+      className="w-full bg-transparent outline-none text-gray-700"
+      disabled
+    />
+    <p className="text-xs text-gray-500 mt-1">Payment processing via Supabase (demo). For production, integrate Stripe.</p>
+  </div>
+);
+const Elements = ({ children }: any) => <>{children}</>;
+const useElements = () => ({ getElement: () => ({}) } as any);
+const useStripe = () => ({
+  confirmCardPayment: async () => ({ error: null, paymentIntent: { status: 'succeeded' } }),
+} as any);
 const loadStripe = async (_key: string) => null;
-const useElements = () => ({ getElement: (..._a: any[]) => ({}) } as any);
-const useStripe = () => ({ confirmCardPayment: async (..._a: any[]) => ({ error: null, paymentIntent: { status: 'succeeded' } }) } as any);
 
 interface CheckoutProps {
   items: Array<{

@@ -3,40 +3,7 @@ import { logger } from '../../../utils/logger';
 import { Loading, ErrorMessage } from '../components/StatusIndicators';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import type { Promotion } from '../../../types';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => ({ promotions: [] }),
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 export const PromotionManagement: React.FC = () => {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -52,7 +19,7 @@ export const PromotionManagement: React.FC = () => {
       setLoading(true);
       const result = await adminApiService.getAllPromotions();
       if (result) {
-        setPromotions(result.promotions);
+        setPromotions((result.promotions || []) as Promotion[]);
         setError(null);
       }
     } catch (err) {

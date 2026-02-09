@@ -229,25 +229,39 @@ export async function uploadVerificationDocument(
  */
 export async function finalizeVerificationSubmission(
   sellerId: string,
-  _documentUrls: Record<string, string>
+  documentUrls: Record<string, string>
 ): Promise<KYCSubmitResult> {
   try {
+    // Map uploaded doc IDs to the correct DB columns
+    const urlMapping: Record<string, string> = {};
+    if (documentUrls['tax-id']) urlMapping.id_document_url = documentUrls['tax-id'];
+    if (documentUrls['addr-f'] || documentUrls['addr-b']) {
+      urlMapping.address_proof_url = documentUrls['addr-f'] || documentUrls['addr-b'];
+    }
+    if (documentUrls['bank-stmt']) urlMapping.bank_statement_url = documentUrls['bank-stmt'];
+
+    // Store all document URLs together in a JSONB-friendly object
+    const verificationDocs = { ...documentUrls };
+
     // Check if KYC record exists; if not, create a minimal one
     const { data: existing } = await supabase
       .from('seller_kyc')
-      .select('id')
+      .select('id, business_address')
       .eq('seller_id', sellerId)
       .single();
 
     if (existing) {
-      // Update with document URLs — store in business_address JSONB as a sub-key
+      // Merge verification doc URLs into business_address JSONB
+      const currentAddress = (existing.business_address as Record<string, unknown>) || {};
+      const updatedAddress = { ...currentAddress, verification_documents: verificationDocs };
+
       const { error } = await supabase
         .from('seller_kyc')
         .update({
           kyc_status: 'pending',
           submitted_at: new Date().toISOString(),
-          // Store additional doc URLs in the business_address JSONB
-          // or as separate columns if you add them later
+          business_address: updatedAddress,
+          ...urlMapping,
         })
         .eq('seller_id', sellerId);
 
@@ -255,7 +269,7 @@ export async function finalizeVerificationSubmission(
         return { success: false, error: error.message };
       }
     } else {
-      // Create a new record with just the submission marker
+      // Create a new record with document URLs
       const { error } = await supabase
         .from('seller_kyc')
         .insert({
@@ -263,6 +277,8 @@ export async function finalizeVerificationSubmission(
           email: '',
           kyc_status: 'pending',
           submitted_at: new Date().toISOString(),
+          business_address: { verification_documents: verificationDocs },
+          ...urlMapping,
         });
 
       if (error) {

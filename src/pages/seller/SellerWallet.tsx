@@ -9,12 +9,7 @@ import {
   Wallet, RefreshCw, Search, Loader2, X
 } from 'lucide-react';
 import { formatPrice } from '../../constants';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const ordersBySeller = '';
-const processSellerPayout = '';
+import { fetchOrdersBySeller, createWithdrawal } from '../../lib/orderService';
 
 interface Transaction {
   id: string;
@@ -54,17 +49,12 @@ const SellerWallet: React.FC<SellerWalletProps> = ({ onLogout, sellerEmail, onNa
         
         const sellerId = (user as any)?.attributes?.sub || user?.id || sellerEmail;
         
-        const response: any = await client.graphql({
-          query: ordersBySeller,
-          variables: {
-            seller_id: sellerId,
-            sortDirection: 'DESC',
-            limit: 100
-          }
-        });
+        const { data, error: fetchError } = await fetchOrdersBySeller(sellerId, { limit: 100 });
 
-        if (response.data?.ordersBySeller?.items) {
-          setOrders(response.data.ordersBySeller.items);
+        if (fetchError) {
+          setError('Failed to load wallet data. Please try again.');
+        } else {
+          setOrders(data);
         }
       } catch (err) {
         logger.error('Failed to fetch wallet data:', err as Record<string, any>);
@@ -208,23 +198,18 @@ const SellerWallet: React.FC<SellerWalletProps> = ({ onLogout, sellerEmail, onNa
       setWithdrawing(true);
       const sellerId = (user as any)?.attributes?.sub || user?.id || sellerEmail;
       
-      const response: any = await client.graphql({
-        query: processSellerPayout,
-        variables: {
-          input: {
-            sellerId,
-            forceAmount: Math.round(parseFloat(withdrawAmount) * 100)
-          }
-        }
-      });
+      const { data: withdrawal, error: wError } = await createWithdrawal(
+        sellerId,
+        parseFloat(withdrawAmount)
+      );
 
-      if (response.data?.processSellerPayout?.success) {
-        logger.log('Withdrawal successful', response.data.processSellerPayout);
+      if (wError || !withdrawal) {
+        alert('Withdrawal failed: ' + (wError || 'Unknown error'));
+      } else {
+        logger.log('Withdrawal successful', withdrawal);
         alert('Withdrawal request submitted successfully!');
         setShowWithdrawModal(false);
         setWithdrawAmount('');
-      } else {
-        alert('Withdrawal failed: ' + (response.data?.processSellerPayout?.error || 'Unknown error'));
       }
     } catch (err) {
       logger.error('Withdrawal error:', err as Record<string, any>);

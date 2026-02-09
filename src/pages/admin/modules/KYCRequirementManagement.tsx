@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Loader2 } from 'lucide-react';
+import {
+  getAllKYCRequirements,
+  createKYCRequirement,
+  updateKYCRequirement,
+  deleteKYCRequirement,
+} from '../../../lib/adminService';
 
-// TODO: Backend stubs — connect to your API
 type KYCRequirement = any;
-const createKYCRequirement = async (..._a: any[]) => ({});
-const deleteKYCRequirement = async (..._a: any[]) => ({});
-const getAllKYCRequirements = async () => [];
-const updateKYCRequirement = async (..._a: any[]) => ({});
 
 export const KYCRequirementManagement: React.FC = () => {
   const [requirements, setRequirements] = useState<KYCRequirement[]>([]);
@@ -27,8 +28,8 @@ export const KYCRequirementManagement: React.FC = () => {
 
   const loadRequirements = async () => {
     setLoading(true);
-    const data = await getAllKYCRequirements();
-    setRequirements(data);
+    const result = await getAllKYCRequirements();
+    setRequirements(result.data || []);
     setLoading(false);
   };
 
@@ -61,10 +62,12 @@ export const KYCRequirementManagement: React.FC = () => {
       // Update existing
       const updated = await updateKYCRequirement(
         editingId,
-        formData.country,
-        formData.registrationType,
-        formData.requiredDocuments,
-        formData.description
+        {
+          country: formData.country,
+          registration_type: formData.registrationType,
+          required_documents: formData.requiredDocuments,
+          description: formData.description,
+        }
       );
       if (updated) {
         alert('Updated successfully');
@@ -73,12 +76,12 @@ export const KYCRequirementManagement: React.FC = () => {
       }
     } else {
       // Create new
-      const created = await createKYCRequirement(
-        formData.country,
-        formData.registrationType,
-        formData.requiredDocuments,
-        formData.description
-      );
+      const created = await createKYCRequirement({
+        country: formData.country,
+        registration_type: formData.registrationType,
+        required_documents: formData.requiredDocuments,
+        description: formData.description,
+      });
       if (created) {
         alert('Created successfully');
         loadRequirements();

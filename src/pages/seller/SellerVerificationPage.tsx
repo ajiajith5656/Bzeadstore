@@ -41,7 +41,7 @@ export const SellerVerificationPage: React.FC<Props> = ({ seller, onStatusUpdate
           sellerEmail={seller.email}
           sellerPhone={seller.phone || ''}
           sellerFullName={seller.shop_name}
-          sellerCountry={'US'}
+          sellerCountry={'India'}
           sellerId={seller.id}
           onSubmit={() => {
             onStatusUpdate?.({ kyc_status: 'pending' });

@@ -5,11 +5,7 @@ import { Footer } from '../../components/layout/Footer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Package, ChevronRight, Loader2 } from 'lucide-react';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const ordersByUser = '';
+import { fetchOrdersByUser } from '../../lib/orderService';
 
 interface Order {
   id: string;
@@ -41,21 +37,14 @@ export const MyOrders: React.FC = () => {
       try {
         setLoading(true);
         
-        // Query orders for current user
-        const response: any = await client.graphql({
-          query: ordersByUser,
-          variables: {
-            user_id: userId,
-            sortDirection: 'DESC',
-            limit: 50,
-          },
-        });
+        // Query orders for current user from Supabase
+        const result = await fetchOrdersByUser(userId);
 
-        if (response.data?.ordersByUser?.items) {
-          const fetchedOrders = response.data.ordersByUser.items.map((order: any) => {
+        if (result) {
+          const fetchedOrders = result.map((order: any) => {
             let itemsCount = 0;
             try {
-              const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+              const items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.order_items || order.items);
               itemsCount = Array.isArray(items) ? items.length : 0;
             } catch (e) {
               itemsCount = 0;

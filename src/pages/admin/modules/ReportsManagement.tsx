@@ -1,39 +1,6 @@
 import React, { useState } from 'react';
 import { ErrorMessage, SuccessMessage } from '../components/StatusIndicators';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => new Blob(),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 export const ReportsManagement: React.FC = () => {
   const [reportType, setReportType] = useState('sales');
@@ -52,10 +19,10 @@ export const ReportsManagement: React.FC = () => {
       setError(null);
       setSuccess(null);
 
-      const blob = await adminApiService.generateReport(reportType, {
-        dateRange: startDate && endDate ? { start: startDate, end: endDate } : undefined,
-        category: category || undefined,
-        country: country || undefined,
+      const blob = await adminApiService.generateReport({
+        type: reportType,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
         format,
       });
 

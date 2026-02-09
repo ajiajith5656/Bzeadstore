@@ -1,55 +1,25 @@
 import React, { useEffect, useState } from 'react';
 import { Loading, ErrorMessage } from '../components/StatusIndicators';
 import type { Admin } from '../../../types';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ id: '', email: '', full_name: 'Admin', phone: '', created_at: new Date().toISOString(), permissions: [], is_active: true } as any),
-};
+import { useAuth } from '../../../contexts/AuthContext';
+import * as adminApiService from '../../../lib/adminService';
 
 export const ProfilePage: React.FC = () => {
   const [profile, setProfile] = useState<Admin | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const result = await adminApiService.getAdminProfile();
-        if (result) {
-          setProfile(result);
+        if (!user?.id) { setError('Not authenticated'); setLoading(false); return; }
+        const result = await adminApiService.getAdminProfile(user.id);
+        if (result.data) {
+          setProfile(result.data as unknown as Admin);
           setError(null);
         } else {
-          setError('Failed to load profile');
+          setError(result.error || 'Failed to load profile');
         }
       } catch (err) {
         setError('Failed to load profile');

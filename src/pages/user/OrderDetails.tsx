@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import logger from '../../utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Package, Truck, RotateCcw, Download, Loader2 } from 'lucide-react';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const getOrder = '';
+import { fetchOrderById } from '../../lib/orderService';
 
 interface OrderItem {
   id: string;
@@ -52,13 +48,9 @@ export const OrderDetails: React.FC = () => {
       try {
         setLoading(true);
 
-        // Fetch order from GraphQL
-        const response: any = await client.graphql({
-          query: getOrder,
-          variables: { id: orderId },
-        });
+        // Fetch order from Supabase
+        const orderData = await fetchOrderById(orderId);
 
-        const orderData = response.data?.getOrder;
         if (orderData) {
           // Parse items from JSON
           let orderItems: OrderItem[] = [];

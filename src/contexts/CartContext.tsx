@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Product } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface CartItem {
   product: Product;
@@ -74,17 +75,32 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const totalAmount = subtotal + taxAmount + shippingCost;
 
       // TODO: Connect to your backend order API
-      const order = {
-        id: `order_${Date.now()}`,
-        user_id: userId,
-        order_number: `ORD-${Date.now()}`,
-        status: 'pending',
-        total_amount: totalAmount,
-        shipping_address: shippingAddress,
-        created_at: new Date().toISOString(),
-      };
+      // Create order in Supabase
+      const { data: order, error: orderErr } = await supabase
+        .from('orders')
+        .insert({
+          user_id: userId,
+          order_number: `ORD-${Date.now()}`,
+          status: 'pending',
+          total_amount: totalAmount,
+          shipping_address: shippingAddress,
+        })
+        .select()
+        .single();
 
-      console.log('Order created (local):', order);
+      if (orderErr || !order) throw new Error(orderErr?.message || 'Failed to create order');
+
+      // Insert order items
+      const orderItems = items.map((item) => ({
+        order_id: order.id,
+        product_id: item.product.id,
+        product_name: item.product.name,
+        quantity: item.quantity,
+        price: item.product.price,
+      }));
+      await supabase.from('order_items').insert(orderItems);
+
+      console.log('Order created in Supabase:', order);
       clearCart();
       return order;
     } catch (error) {

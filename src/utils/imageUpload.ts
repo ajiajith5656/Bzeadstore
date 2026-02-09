@@ -1,3 +1,5 @@
+import { supabase } from '../lib/supabase';
+
 export interface ImageUploadOptions {
   maxWidth?: number;
   maxHeight?: number;
@@ -76,17 +78,29 @@ export const compressImage = (
 };
 
 /**
- * Upload image — placeholder (no cloud backend)
- * TODO: Connect to your own storage/upload endpoint
+ * Upload image to Supabase Storage
  */
 export const uploadImageToS3 = async (
-  _compressedBlob: Blob,
-  _categoryId: string,
+  compressedBlob: Blob,
+  categoryId: string,
   fileName: string
 ): Promise<string> => {
-  // TODO: Replace with your own upload API
-  console.warn('uploadImageToS3: No backend configured. Returning placeholder URL.');
-  return `https://placeholder.local/uploads/${Date.now()}-${fileName}`;
+  const ext = fileName.split('.').pop() || 'jpg';
+  const path = `categories/${categoryId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(path, compressedBlob, {
+      contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+    });
+
+  if (error) {
+    console.error('Upload failed:', error.message);
+    throw new Error(`Upload failed: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+  return data.publicUrl;
 };
 
 /**

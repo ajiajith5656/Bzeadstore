@@ -9,10 +9,7 @@ import {
 } from 'lucide-react';
 import SellerVerificationPage from './SellerVerificationPage';
 import type { Seller } from '../../types';
-
-// TODO: Backend stubs — connect to your API
-const generateClient = () => ({ graphql: async (_opts: any): Promise<any> => ({ data: {} }) });
-const ordersBySeller = '';
+import { fetchOrdersBySeller } from '../../lib/orderService';
 
 interface SellerDashboardProps {
   onLogout: () => void;
@@ -31,12 +28,11 @@ const SellerDashboard: React.FC<SellerDashboardProps> = ({
   sellerEmail, 
   sellerPhone = '', 
   sellerFullName = 'Seller', 
-  sellerCountry = 'India',
+  sellerCountry: _sellerCountry = 'India',
   onNavigate, 
   verificationStatus 
 }) => {
   const { user } = useAuth();
-  const client = generateClient();
   const [activeSection, setActiveSection] = useState<DashboardSection>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [_kycSubmitted, setKycSubmitted] = useState(false);
@@ -62,17 +58,12 @@ const SellerDashboard: React.FC<SellerDashboardProps> = ({
       setLoading(true);
       setError(null);
 
-      const response: any = await client.graphql({
-        query: ordersBySeller,
-        variables: {
-          seller_id: sellerId,
-          sortDirection: 'DESC',
-          limit: 50
-        }
-      });
+      const { data, error: fetchError } = await fetchOrdersBySeller(sellerId!, { limit: 50 });
 
-      if (response.data?.ordersBySeller?.items) {
-        setOrders(response.data.ordersBySeller.items);
+      if (fetchError) {
+        setError('Failed to load dashboard data');
+      } else {
+        setOrders(data);
       }
     } catch (err) {
       console.error('Error fetching orders:', err);
@@ -289,13 +280,17 @@ const SellerDashboard: React.FC<SellerDashboardProps> = ({
         {activeSection === 'verification' && (
           <SellerVerificationPage 
             seller={{
-              seller_id: (user as any)?.attributes?.sub || user?.id || 'seller-id',
+              id: sellerId || '',
+              user_id: sellerId || '',
+              shop_name: sellerFullName,
               email: sellerEmail,
-              phone_number: sellerPhone,
-              full_name: sellerFullName,
-              country: sellerCountry,
-              kyc_status: verificationStatus,
-            } as unknown as Seller}
+              phone: sellerPhone,
+              total_listings: 0,
+              kyc_status: verificationStatus === 'verified' ? 'approved' : verificationStatus,
+              product_approval_status: 'pending',
+              created_at: new Date().toISOString(),
+              is_active: true,
+            } as Seller}
             onStatusUpdate={(updates) => {
               logger.log('Verification status updated', { updates });
               if (updates.kyc_status === 'pending' || updates.kyc_status === 'verified') {

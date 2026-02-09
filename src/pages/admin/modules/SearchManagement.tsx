@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Filter, Download } from 'lucide-react';
 import { logger } from '../../../utils/logger';
+import { adminGlobalSearch } from '../../../lib/adminService';
 
 interface SearchResult {
   type: 'user' | 'seller' | 'product' | 'order';
@@ -31,36 +32,10 @@ export const SearchManagement: React.FC = () => {
 
     setIsSearching(true);
     try {
-      // TODO: Implement search API call
       logger.log('Search initiated', { query: searchQuery, filters: selectedFilters });
 
-      // Mock results
-      const mockResults: SearchResult[] = [
-        {
-          type: 'user',
-          id: 'USR-001',
-          title: 'John Doe',
-          description: 'User registered on 2024-01-15',
-          metadata: 'Email: john@example.com'
-        },
-        {
-          type: 'product',
-          id: 'PROD-001',
-          title: 'Premium Headphones',
-          description: 'Electronics > Audio',
-          metadata: 'Seller: Tech Store | Price: ₹2,999'
-        },
-        {
-          type: 'order',
-          id: 'ORD-001',
-          title: 'Order #ORD-001',
-          description: 'Placed on 2024-01-15',
-          metadata: 'Status: Delivered | Total: ₹4,599'
-        }
-      ];
-
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setResults(mockResults);
+      const searchResults = await adminGlobalSearch(searchQuery, selectedFilters);
+      setResults(searchResults);
     } catch (error) {
       logger.error(error as Error, { context: 'Search failed' });
       alert('Search failed. Please try again.');

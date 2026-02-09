@@ -4,15 +4,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import SellerDashboard from './SellerDashboard';
 import { logger } from '../../utils/logger';
 import { Loader2 } from 'lucide-react';
-
-// TODO: Backend stubs — connect to your API
-const generateClient = () => ({ graphql: async (_opts: any): Promise<any> => ({ data: {} }) });
-const getSeller = '';
+import { getSellerKYCStatus } from '../../lib/kycService';
 
 export const SellerDashboardWrapper: React.FC = () => {
   const navigate = useNavigate();
   const { signOut, user, currentAuthUser } = useAuth();
-  const client = generateClient();
   
   const [verificationStatus, setVerificationStatus] = useState<'unverified' | 'pending' | 'verified'>('unverified');
   const [loading, setLoading] = useState(true);
@@ -34,21 +30,20 @@ export const SellerDashboardWrapper: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response: any = await client.graphql({
-        query: getSeller,
-        variables: { id: sellerId }
-      });
+      const { kycData, error: kycError } = await getSellerKYCStatus(sellerId!);
 
-      if (response.data?.getSeller) {
-        const seller = response.data.getSeller;
-        // Map kyc_status to verificationStatus
-        const status = seller.kyc_status || 'unverified';
-        setVerificationStatus(status as 'unverified' | 'pending' | 'verified');
+      if (kycError) {
+        // No KYC record yet — default to unverified
+        setVerificationStatus('unverified');
+      } else if (kycData) {
+        const status = kycData.kyc_status || 'unverified';
+        // Map 'approved' to 'verified' for dashboard display
+        const mapped = status === 'approved' ? 'verified' : status === 'pending' ? 'pending' : 'unverified';
+        setVerificationStatus(mapped as 'unverified' | 'pending' | 'verified');
       }
     } catch (err) {
       console.error('Error fetching seller status:', err);
       setError('Failed to load seller information');
-      // Default to unverified on error
       setVerificationStatus('unverified');
     } finally {
       setLoading(false);

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database, Activity, AlertCircle, CheckCircle, XCircle, HardDrive } from 'lucide-react';
+import { getSystemHealth } from '../../../lib/adminService';
 
 interface HealthStatus {
   name: string;
@@ -11,38 +12,41 @@ interface HealthStatus {
 
 export const SystemHealth: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [healthStatuses, setHealthStatuses] = useState<HealthStatus[]>([]);
 
-  // Mock data - TODO: Fetch from API
-  const healthStatuses: HealthStatus[] = [
-    {
-      name: 'Database Connection',
-      status: 'healthy',
-      metric: '99.9% uptime',
-      message: 'All database connections are stable',
-      icon: <Database className="w-6 h-6" />
-    },
-    {
-      name: 'API Server',
-      status: 'healthy',
-      metric: '45ms avg response',
-      message: 'API server is responding normally',
-      icon: <Activity className="w-6 h-6" />
-    },
-    {
-      name: 'Storage (S3)',
-      status: 'warning',
-      metric: '78% capacity used',
-      message: 'Storage usage is approaching limit',
-      icon: <HardDrive className="w-6 h-6" />
-    },
-    {
-      name: 'Cache Server',
-      status: 'healthy',
-      metric: '95% hit rate',
-      message: 'Cache performance is excellent',
-      icon: <Activity className="w-6 h-6" />
+  useEffect(() => {
+    const loadHealth = async () => {
+      const data = await getSystemHealth();
+      setHealthStatuses([
+        {
+          name: 'Database Connection',
+          status: data.dbStatus === 'healthy' ? 'healthy' : 'critical',
+          metric: `${data.totalUsers} users, ${data.totalProducts} products`,
+          message: `${data.totalOrders} orders, ${data.totalComplaints} complaints`,
+          icon: <Database className="w-6 h-6" />,
+        },
+        {
+          name: 'API Server',
+          status: 'healthy',
+          metric: 'Supabase connected',
+          message: `Last checked: ${new Date(data.lastChecked).toLocaleTimeString()}`,
+          icon: <Activity className="w-6 h-6" />,
+        },
+        {
+          name: 'Storage',
+          status: 'healthy',
+          metric: 'Supabase Storage active',
+          message: 'Buckets: product-images, kyc-documents',
+          icon: <HardDrive className="w-6 h-6" />,
+        },
+      ]);
+    };
+    loadHealth();
+    if (autoRefresh) {
+      const interval = setInterval(loadHealth, 30000);
+      return () => clearInterval(interval);
     }
-  ];
+  }, [autoRefresh]);
 
   const getStatusColor = (status: string) => {
     const colors = {

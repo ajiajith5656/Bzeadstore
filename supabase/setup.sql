@@ -12,6 +12,11 @@
 -- 07_admin_setup.sql    → Admin user creation instructions
 -- 08_categories.sql     → Categories + sub-categories + seed data + RLS
 -- 09_products.sql       → Products + variants + delivery + offers + reviews + storage + RLS
+-- 10_remaining_tables.sql → Orders, addresses, cart, wishlists, banners, promotions,
+--                           complaints, payouts, withdrawals, notifications, audit logs,
+--                           accounting (daybook, bank book, account heads, expenses),
+--                           membership plans, tax rules, platform costs,
+--                           payment intents, refunds, checkout sessions
 --
 -- IMPORTANT: Run 03_functions.sql BEFORE 04 & 05 (they depend on it).
 -- Run 06_storage.sql via Supabase SQL Editor (needs storage schema access).

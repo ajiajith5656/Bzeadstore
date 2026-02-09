@@ -3,40 +3,7 @@ import { Loading, ErrorMessage, SuccessMessage } from '../components/StatusIndic
 import { Search, Eye, CheckCircle, XCircle } from 'lucide-react';
 import type { Seller } from '../../../types';
 import { logger } from '../../../utils/logger';
-
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async (..._a: any[]) => ({ sellers: [], total: 0 }),
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+import * as adminApiService from '../../../lib/adminService';
 
 interface PaginationState {
   page: number;
@@ -67,12 +34,12 @@ export const SellerManagement: React.FC = () => {
   const fetchSellers = async () => {
     try {
       setLoading(true);
-      const result = await adminApiService.getAllSellers(
-        pagination.page,
-        pagination.limit,
-        searchTerm,
-        kycFilter
-      );
+      const result = await adminApiService.getAllSellers({
+        limit: pagination.limit,
+        offset: (pagination.page - 1) * pagination.limit,
+        search: searchTerm || undefined,
+        kycFilter: kycFilter || undefined,
+      });
       if (result) {
         setSellers(result.sellers);
         setPagination((prev) => ({ ...prev, total: result.total }));

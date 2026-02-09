@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Truck, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import type { OrderData } from '../../types';
-
-// TODO: Backend stubs — connect to your API
-const getCustomerOrders = async (..._a: any[]) => [];
+import { fetchOrdersByUser } from '../../lib/orderService';
 
 interface OrderTrackingProps {
   customerId: string;
@@ -21,8 +19,8 @@ const OrderTracking: React.FC<OrderTrackingProps> = ({ customerId, onOrderSelect
       setIsLoading(true);
       setError(null);
       try {
-        const customerOrders = await getCustomerOrders(customerId);
-        setOrders(customerOrders);
+        const customerOrders = await fetchOrdersByUser(customerId);
+        setOrders(customerOrders as unknown as OrderData[]);
       } catch (err) {
         setError(`Failed to load orders: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {

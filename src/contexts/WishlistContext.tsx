@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Product } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface WishlistContextType {
   items: Product[];
@@ -27,12 +28,31 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     localStorage.setItem('beauzead_wishlist', JSON.stringify(items));
   }, [items]);
 
-  const syncToBackend = async (_userId: string) => {
-    // TODO: Connect to your backend API
+  const syncToBackend = async (userId: string) => {
+    // Sync local wishlist items to Supabase wishlists table
+    for (const product of items) {
+      await supabase
+        .from('wishlists')
+        .upsert(
+          { user_id: userId, product_id: product.id },
+          { onConflict: 'user_id,product_id' }
+        );
+    }
   };
 
-  const loadFromBackend = async (_userId: string) => {
-    // TODO: Connect to your backend API
+  const loadFromBackend = async (userId: string) => {
+    // Load wishlist from Supabase wishlists table with product data
+    const { data } = await supabase
+      .from('wishlists')
+      .select('*, products(*)')
+      .eq('user_id', userId);
+
+    if (data && data.length > 0) {
+      const backendProducts = data
+        .map((w: any) => w.products)
+        .filter(Boolean) as Product[];
+      setItems(backendProducts);
+    }
   };
 
   const addToWishlist = (product: Product) => {
