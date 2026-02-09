@@ -13,7 +13,7 @@ export const Login: React.FC<LoginProps> = ({ role = 'user' }) => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signOut } = useAuth();
+  const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -30,14 +30,6 @@ export const Login: React.FC<LoginProps> = ({ role = 'user' }) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    try {
-      // First, sign out any existing session to prevent "already signed in" error
-      await signOut();
-    } catch (err) {
-      // Ignore signout errors, continue with login
-      console.log('No existing session to sign out');
-    }
 
     const result = await signIn(email, password);
 

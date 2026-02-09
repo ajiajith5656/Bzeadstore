@@ -102,9 +102,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initSession = async () => {
       try {
         // Add timeout to prevent getSession from hanging indefinitely
+        // Supabase free tier cold starts can take 10-15s
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Auth session timeout')), 5000)
+          setTimeout(() => reject(new Error('Auth session check timed out — continuing as guest')), 15000)
         );
 
         const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
@@ -117,7 +118,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       } catch (err) {
-        logger.error(err as Error, { context: 'Auth init error' });
+        // This is expected on first visit or cold starts — just log as info
+        console.info('[Auth]', (err as Error).message);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -200,10 +202,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    */
   const signIn = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // Sign in with timeout — Supabase free tier can be slow on cold starts
+      const signInPromise = supabase.auth.signInWithPassword({
         email,
         password,
       });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Sign in timed out. Please try again.')), 20000)
+      );
+
+      const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
 
       if (error) {
         // Map Supabase errors to user-friendly messages

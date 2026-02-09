@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '../../utils/logger';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Mail, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const SellerLogin: React.FC = () => {
-  const { signIn, signOut } = useAuth();
+  const { signIn } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -28,14 +27,6 @@ const SellerLogin: React.FC = () => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
-    try {
-      // First, sign out any existing session to prevent "already signed in" error
-      await signOut();
-    } catch (err) {
-      // Ignore signout errors, continue with login
-      logger.log('No existing session', {});
-    }
 
     const result = await signIn(email, password);
 
