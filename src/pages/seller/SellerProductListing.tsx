@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { logger } from '../../utils/logger';
+import {
+  fetchProducts as fetchProductsFromDB,
+  createProduct,
+  fetchCategories,
+  uploadProductImage,
+  uploadProductVideo,
+} from '../../lib/productService';
 import { 
   LayoutDashboard, Package, ShoppingBag, DollarSign, 
   Settings, LogOut, Plus, Filter, Eye,
@@ -12,12 +18,6 @@ import { formatPrice } from '../../constants';
 
 
 // Color options for variants
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-const createProduct = '';
-const productsBySeller = '';
-
-const COLORS = [
   { name: 'Black', hex: '#000000' },
   { name: 'White', hex: '#FFFFFF' },
   { name: 'Red', hex: '#FF0000' },
@@ -79,6 +79,7 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
     shipping: false,
     offers: false
   });
+  const [categoryList, setCategoryList] = useState<{ id: string; name: string }[]>([]);
   
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -162,29 +163,44 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
     specialDay: ''
   });
 
-  // Fetch seller products from GraphQL
+  // Fetch seller products from Supabase
+  useEffect(() => {
+    fetchCategories().then(({ data }) => setCategoryList(data as { id: string; name: string }[]));
+  }, []);
+
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
         setError(null);
         
-        const sellerId = (user as any)?.attributes?.sub || user?.id || 'seller-id';
+        const sellerId = user?.id || '';
+        if (!sellerId) return;
         
-        const response: any = await client.graphql({
-          query: productsBySeller,
-          variables: {
-            seller_id: sellerId,
-            sortDirection: 'DESC',
-            limit: 100
-          }
-        });
-
-        if (response.data?.productsBySeller?.items) {
-          setProducts(response.data.productsBySeller.items);
+        const { data, error: e } = await fetchProductsFromDB({ sellerId });
+        
+        if (e) {
+          setError(e);
+        } else if (data) {
+          setProducts(data.map((p: any) => ({
+            id: p.id,
+            name: p.name || '',
+            category: p.category || '',
+            price: p.price || 0,
+            stockCount: p.stock || 0,
+            inStock: (p.stock || 0) > 0,
+            approved: p.approval_status === 'approved',
+            revenue: 0,
+            orders: 0,
+            views: 0,
+            rating: p.rating || 0,
+            image: p.image_url || '',
+            brand: p.brand || '',
+            reviewCount: p.review_count || 0,
+            discount: p.mrp && p.price ? Math.round(((p.mrp - p.price) / p.mrp) * 100) : 0,
+          })));
         }
-      } catch (err) {
-        logger.error('Failed to fetch products:', err as Record<string, any>);
+      } catch (err: any) {
         setError('Failed to load products. Please try again.');
       } finally {
         setLoading(false);
@@ -201,7 +217,7 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
     try {
       setCreating(true);
       
-      const sellerId = (user as any)?.attributes?.sub || user?.id || 'seller-id';
+      const sellerId = user?.id || '';
       
       // Validation
       if (!newProduct.name || !newProduct.category || !newProduct.mrp || !newProduct.price || !newProduct.stock) {
@@ -228,18 +244,32 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
         return;
       }
       
-      if (newProduct.imageUrls.length < 5) {
+      if (newProduct.images.length < 5) {
         alert('Please upload at least 5 product images (maximum 10)');
         setCreating(false);
         return;
       }
 
+      // Upload images to Supabase Storage
+      const uploadedImageUrls: string[] = [];
+      for (const file of newProduct.images) {
+        const url = await uploadProductImage(file, sellerId);
+        uploadedImageUrls.push(url);
+      }
+
+      // Upload videos to Supabase Storage
+      const uploadedVideoUrls: string[] = [];
+      for (const file of newProduct.videos) {
+        const url = await uploadProductVideo(file, sellerId);
+        uploadedVideoUrls.push(url);
+      }
+
       const productInput = {
         seller_id: sellerId,
         name: newProduct.name,
-        category_id: newProduct.category,
-        sub_category_id: newProduct.subCategory || undefined,
-        brand_name: newProduct.brand_name || newProduct.name,
+        category: newProduct.category,
+        sub_category: newProduct.subCategory || undefined,
+        brand: newProduct.brand_name || newProduct.name,
         model_number: newProduct.modelNumber || undefined,
         description: newProduct.description || newProduct.name,
         short_description: newProduct.shortDescription || newProduct.description?.substring(0, 100) || newProduct.name,
@@ -253,50 +283,42 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
         platform_fee: newProduct.platformFee,
         commission: newProduct.commission,
         
-        // Media
-        image_url: newProduct.imageUrls[0] || newProduct.image_url || 'https://via.placeholder.com/400',
-        images: newProduct.imageUrls.length > 0 ? newProduct.imageUrls : [newProduct.image_url || 'https://via.placeholder.com/400'],
-        videos: newProduct.videoUrls,
+        // Media (real uploaded URLs)
+        image_url: uploadedImageUrls[0] || '',
+        images: uploadedImageUrls,
+        videos: uploadedVideoUrls,
         
         // Details
         highlights: newProduct.highlights,
         specifications: newProduct.specifications,
         
         // Variants
-        size_variants: newProduct.sizeVariants,
-        color_variants: newProduct.colorVariants,
+        sizeVariants: newProduct.sizeVariants,
+        colorVariants: newProduct.colorVariants,
         
         // Shipping
         package_weight: parseFloat(newProduct.packageWeight) || 0,
-        package_dimensions: {
-          length: parseFloat(newProduct.packageLength) || 0,
-          width: parseFloat(newProduct.packageWidth) || 0,
-          height: parseFloat(newProduct.packageHeight) || 0
-        },
+        package_length: parseFloat(newProduct.packageLength) || 0,
+        package_width: parseFloat(newProduct.packageWidth) || 0,
+        package_height: parseFloat(newProduct.packageHeight) || 0,
         shipping_type: newProduct.shippingType,
         manufacturer_name: newProduct.manufacturerName || undefined,
         cancellation_policy_days: newProduct.cancellationPolicyDays,
         return_policy_days: newProduct.returnPolicyDays,
         
         // Other
-        delivery_countries: newProduct.deliveryCountries,
-        offer_rules: newProduct.offerRules,
+        deliveryCountries: newProduct.deliveryCountries,
+        offerRules: newProduct.offerRules,
         
         approval_status: 'pending',
-        is_active: true,
-        rating: 0,
-        review_count: 0
+        is_active: false,
       };
 
-      const response: any = await client.graphql({
-        query: createProduct,
-        variables: {
-          input: productInput
-        }
-      });
+      const { data, error: createError } = await createProduct(productInput);
 
-      if (response.data?.createProduct) {
-        logger.log('Product created successfully', response.data.createProduct);
+      if (createError) {
+        alert('Failed to create product: ' + createError);
+      } else if (data) {
         alert('Product created successfully! It will be visible after admin approval.');
         
         // Reset form
@@ -322,9 +344,8 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
         // Refresh products list
         window.location.reload();
       }
-    } catch (err) {
-      logger.error('Failed to create product:', err as Record<string, any>);
-      alert('Failed to create product. Please try again.');
+    } catch (err: any) {
+      alert('Failed to create product: ' + (err.message || 'Please try again.'));
     } finally {
       setCreating(false);
     }
@@ -844,14 +865,9 @@ const SellerProductListing: React.FC<SellerProductListingProps> = ({ onLogout, o
                   disabled={creating}
                 >
                   <option value="">Select Category</option>
-                  <option value="Electronics">Electronics</option>
-                  <option value="Fashion">Fashion</option>
-                  <option value="Home & Garden">Home & Garden</option>
-                  <option value="Sports">Sports</option>
-                  <option value="Books">Books</option>
-                  <option value="Toys">Toys</option>
-                  <option value="Beauty">Beauty</option>
-                  <option value="Automotive">Automotive</option>
+                  {categoryList.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
                 </select>
               </div>
 

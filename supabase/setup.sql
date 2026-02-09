@@ -10,7 +10,10 @@
 -- 05_seller_kyc.sql     → Seller KYC table + RLS
 -- 06_storage.sql        → KYC documents storage bucket + RLS
 -- 07_admin_setup.sql    → Admin user creation instructions
+-- 08_categories.sql     → Categories + sub-categories + seed data + RLS
+-- 09_products.sql       → Products + variants + delivery + offers + reviews + storage + RLS
 --
 -- IMPORTANT: Run 03_functions.sql BEFORE 04 & 05 (they depend on it).
 -- Run 06_storage.sql via Supabase SQL Editor (needs storage schema access).
+-- Run 08 before 09 (products reference categories).
 -- ============================================

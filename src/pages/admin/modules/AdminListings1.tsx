@@ -1,43 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '../../../utils/logger';
 import { useNavigate } from 'react-router-dom';
 import { useProductListing, type SizeVariant, type ColorVariant } from '../../../contexts/ProductListingContext';
 import { Loading, ErrorMessage } from '../components/StatusIndicators';
 import { Plus, Trash2, ChevronRight, AlertCircle } from 'lucide-react';
+import { fetchCategories } from '../../../lib/productService';
 
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => ({ categories: [] }),
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+
 
 interface Category {
   id: string;
@@ -101,17 +69,17 @@ export const AdminListings1: React.FC = () => {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [categoriesResult] = await Promise.all([
-        adminApiService.getAllCategories(),
-      ]);
-      
-      if (categoriesResult) {
-        setCategories(categoriesResult.categories);
-      }
+      const { data, error: fetchError } = await fetchCategories();
+
+      if (fetchError) throw new Error(fetchError);
+      setCategories((data || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        sub_categories: (c.sub_categories || []).map((s: any) => ({ id: s.id, name: s.name })),
+      })));
       setError(null);
-    } catch (err) {
-      setError('Failed to load data');
-      logger.error(err as Error, { context: 'Admin listings error' });
+    } catch (err: any) {
+      setError(err.message || 'Failed to load data');
     } finally {
       setLoading(false);
     }

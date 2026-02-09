@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { logger } from '../../../utils/logger';
 import { useNavigate } from 'react-router-dom';
 import { useProductListing, type OfferRule } from '../../../contexts/ProductListingContext';
 import { SuccessMessage, ErrorMessage } from '../components/StatusIndicators';
+import { useAuth } from '../../../contexts/AuthContext';
+import { createProduct, uploadProductImage, uploadProductVideo } from '../../../lib/productService';
 import { 
   ChevronLeft, 
   Plus, 
@@ -16,39 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => [],
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+
 
 const SPECIAL_DAYS = [
   'New Year',
@@ -68,6 +37,7 @@ const SPECIAL_DAYS = [
 
 export const AdminListing6: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { productData, updateStep6, getSubmitData, resetForm } = useProductListing();
   const { step6 } = productData;
 
@@ -128,29 +98,53 @@ export const AdminListing6: React.FC = () => {
     navigate('/admin/products/new/step5');
   };
 
+  const uploadMediaFiles = async (sellerId: string, submitData: Record<string, unknown>) => {
+    const imageFiles = (productData.step2.images || []) as File[];
+    const videoFiles = (productData.step2.videos || []) as File[];
+
+    const imageUrls: string[] = [];
+    for (const file of imageFiles) {
+      const url = await uploadProductImage(file, sellerId);
+      imageUrls.push(url);
+    }
+
+    const videoUrls: string[] = [];
+    for (const file of videoFiles) {
+      const url = await uploadProductVideo(file, sellerId);
+      videoUrls.push(url);
+    }
+
+    submitData.images = imageUrls;
+    submitData.videos = videoUrls;
+    submitData.image_url = imageUrls[0] || '';
+  };
+
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
       setError(null);
-      
-      const productData = getSubmitData();
-      logger.log('Product submitted', { productData });
-      
-      // Call the API to create the product
-      const result = await adminApiService.createProduct(productData as any);
-      
-      if (result) {
-        setSuccess('Product created successfully! It will be reviewed before going live.');
-        setTimeout(() => {
-          resetForm();
-          navigate('/admin/products');
-        }, 2000);
-      } else {
-        throw new Error('Failed to create product');
-      }
-    } catch (err) {
+
+      const sellerId = user?.id;
+      if (!sellerId) throw new Error('User not authenticated');
+
+      const submitData = getSubmitData() as Record<string, unknown>;
+      submitData.seller_id = sellerId;
+
+      // Upload images & videos to Supabase Storage
+      await uploadMediaFiles(sellerId, submitData);
+
+      const result = await createProduct(submitData);
+
+      if (result.error) throw new Error(result.error);
+
+      setSuccess('Product created successfully! It will be reviewed before going live.');
+      setTimeout(() => {
+        resetForm();
+        navigate('/admin/products');
+      }, 2000);
+    } catch (err: any) {
       console.error('Failed to create product:', err);
-      setError('Failed to create product. Please try again.');
+      setError(err.message || 'Failed to create product. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -160,15 +154,24 @@ export const AdminListing6: React.FC = () => {
     try {
       setSubmitting(true);
       setError(null);
-      
-      const productData = { ...getSubmitData(), approvalStatus: 'draft' };
-      console.log('Saving draft:', productData);
-      
-      // For now, just show success
+
+      const sellerId = user?.id;
+      if (!sellerId) throw new Error('User not authenticated');
+
+      const submitData = { ...getSubmitData(), approvalStatus: 'draft' } as Record<string, unknown>;
+      submitData.seller_id = sellerId;
+
+      // Upload images & videos to Supabase Storage
+      await uploadMediaFiles(sellerId, submitData);
+
+      const result = await createProduct(submitData);
+
+      if (result.error) throw new Error(result.error);
+
       setSuccess('Draft saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      setError('Failed to save draft. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to save draft. Please try again.');
     } finally {
       setSubmitting(false);
     }

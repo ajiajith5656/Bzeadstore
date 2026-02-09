@@ -2,73 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Eye, CheckCircle, XCircle, Power, Plus, X } from 'lucide-react';
 import type { Product } from '../../../types';
-import { logger } from '../../../utils/logger';
-
-
-// TODO: Backend stubs — connect to your API
-const client = { graphql: async (_opts: any): Promise<any> => ({ data: {} }) };
-
-const listProductsQuery = `
-  query ListProducts($limit: Int, $nextToken: String) {
-    listProducts(limit: $limit, nextToken: $nextToken) {
-      items {
-        id
-        productId
-        name
-        slug
-        description
-        category
-        price
-        discount_price
-        stock
-        sku
-        brand
-        images
-        seller_id
-        approval_status
-        is_active
-        is_featured
-        tags
-        created_at
-        updated_at
-      }
-      nextToken
-    }
-  }
-`;
-
-const approveProductMutation = `
-  mutation ApproveProduct($id: ID!) {
-    approveProduct(id: $id) {
-      id
-      productId
-      approval_status
-      updated_at
-    }
-  }
-`;
-
-const rejectProductMutation = `
-  mutation RejectProduct($id: ID!) {
-    rejectProduct(id: $id) {
-      id
-      productId
-      approval_status
-      updated_at
-    }
-  }
-`;
-
-const toggleProductStatusMutation = `
-  mutation ToggleProductStatus($id: ID!) {
-    toggleProductStatus(id: $id) {
-      id
-      productId
-      is_active
-      updated_at
-    }
-  }
-`;
+import {
+  fetchProducts as fetchProductsFromDB,
+  approveProduct,
+  rejectProduct,
+  toggleProductStatus,
+  fetchCategories,
+} from '../../../lib/productService';
 
 interface PaginationState {
   page: number;
@@ -85,10 +25,10 @@ export const ProductManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [approvalFilter, setApprovalFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [categoryList, setCategoryList] = useState<{ id: string; name: string }[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [nextToken, setNextToken] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
     limit: 50,
@@ -97,30 +37,28 @@ export const ProductManagement: React.FC = () => {
 
   useEffect(() => {
     fetchProducts();
+    fetchCategories().then(({ data }) => setCategoryList(data as { id: string; name: string }[]));
   }, []);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const result: any = await client.graphql({
-        query: listProductsQuery,
-        authMode: 'apiKey',
-        variables: {
-          limit: pagination.limit,
-          nextToken: nextToken,
-        },
+      const { data, error: e, count } = await fetchProductsFromDB({
+        category: categoryFilter || undefined,
+        approvalStatus: approvalFilter || undefined,
+        search: searchTerm || undefined,
+        limit: pagination.limit,
+        offset: (pagination.page - 1) * pagination.limit,
       });
-
-      if (result.data?.listProducts) {
-        const items = result.data.listProducts.items || [];
-        setProducts(items);
-        setNextToken(result.data.listProducts.nextToken);
-        setPagination((prev) => ({ ...prev, total: items.length }));
+      if (e) {
+        setError(e);
+      } else {
+        setProducts(data as Product[]);
+        setPagination(prev => ({ ...prev, total: count }));
         setError(null);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load products');
-      logger.error(err as Error, { context: 'Error fetching products' });
     } finally {
       setLoading(false);
     }
@@ -129,16 +67,15 @@ export const ProductManagement: React.FC = () => {
   const handleApprove = async (productId: string) => {
     try {
       setActionLoading(productId);
-      await client.graphql({
-        query: approveProductMutation,
-        authMode: 'apiKey',
-        variables: { id: productId },
-      });
-      setSuccess('Product approved successfully');
-      await fetchProducts();
+      const res = await approveProduct(productId);
+      if (res.success) {
+        setSuccess('Product approved successfully');
+        await fetchProducts();
+      } else {
+        setError(res.error || 'Failed to approve product');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to approve product');
-      logger.error(err as Error, { context: 'Error approving product' });
     } finally {
       setActionLoading(null);
     }
@@ -147,16 +84,15 @@ export const ProductManagement: React.FC = () => {
   const handleReject = async (productId: string) => {
     try {
       setActionLoading(productId);
-      await client.graphql({
-        query: rejectProductMutation,
-        authMode: 'apiKey',
-        variables: { id: productId },
-      });
-      setSuccess('Product rejected');
-      await fetchProducts();
+      const res = await rejectProduct(productId);
+      if (res.success) {
+        setSuccess('Product rejected');
+        await fetchProducts();
+      } else {
+        setError(res.error || 'Failed to reject product');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to reject product');
-      logger.error(err as Error, { context: 'Error rejecting product' });
     } finally {
       setActionLoading(null);
     }
@@ -165,34 +101,29 @@ export const ProductManagement: React.FC = () => {
   const handleToggleStatus = async (productId: string) => {
     try {
       setActionLoading(productId);
-      await client.graphql({
-        query: toggleProductStatusMutation,
-        authMode: 'apiKey',
-        variables: { id: productId },
-      });
-      setSuccess('Product status updated');
-      await fetchProducts();
+      const res = await toggleProductStatus(productId);
+      if (res.success) {
+        setSuccess('Product status updated');
+        await fetchProducts();
+      } else {
+        setError(res.error || 'Failed to update product status');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to update product status');
-      logger.error(err as Error, { context: 'Error toggling product status' });
     } finally {
       setActionLoading(null);
     }
   };
 
-  // Client-side filtering
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = !searchTerm || 
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesApproval = !approvalFilter || product.approval_status === approvalFilter;
-    const matchesCategory = !categoryFilter || product.category === categoryFilter;
+  // Re-fetch on filter changes
+  useEffect(() => {
+    fetchProducts();
+  }, [searchTerm, approvalFilter, categoryFilter, pagination.page]);
 
-    return matchesSearch && matchesApproval && matchesCategory;
-  });
+  // Client-side filtering (already filtered server-side, but keep for snappy UX)
+  const filteredProducts = products;
 
-  const totalPages = Math.ceil(filteredProducts.length / pagination.limit);
+  const totalPages = Math.ceil(pagination.total / pagination.limit);
 
   if (loading) {
     return (
@@ -278,10 +209,9 @@ export const ProductManagement: React.FC = () => {
             className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-black"
           >
             <option value="">All Categories</option>
-            <option value="electronics">Electronics</option>
-            <option value="fashion">Fashion</option>
-            <option value="home">Home</option>
-            <option value="beauty">Beauty</option>
+            {categoryList.map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -507,5 +437,3 @@ export const ProductManagement: React.FC = () => {
     </div>
   );
 };
-
-export default ProductManagement;

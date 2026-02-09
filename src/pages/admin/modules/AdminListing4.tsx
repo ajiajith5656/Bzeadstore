@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '../../../utils/logger';
 import { useNavigate } from 'react-router-dom';
 import { useProductListing, type DeliveryCountry } from '../../../contexts/ProductListingContext';
 import { Loading, ErrorMessage } from '../components/StatusIndicators';
+import { fetchCountries as fetchCountriesFromDB } from '../../../lib/productService';
 import { 
   ChevronRight, 
   ChevronLeft, 
@@ -13,39 +13,7 @@ import {
   Info
 } from 'lucide-react';
 
-// TODO: Backend stubs — connect to your API
-const adminApiService = {
-  getAllSellers: async () => [],
-  updateSellerKYC: async (..._a: any[]) => ({}),
-  updateSellerBadge: async (..._a: any[]) => ({}),
-  getAllComplaints: async () => [],
-  updateComplaintStatus: async (..._a: any[]) => ({}),
-  getAllReviews: async () => [],
-  flagReview: async (..._a: any[]) => ({}),
-  deleteReview: async (..._a: any[]) => ({}),
-  getAccountSummary: async () => ({}),
-  getDaybook: async () => [],
-  getBankBook: async () => [],
-  getAccountHeads: async () => [],
-  getExpenses: async () => [],
-  getSellerPayouts: async () => [],
-  getMembershipPlans: async () => [],
-  getTaxRules: async () => [],
-  getPlatformCosts: async () => [],
-  generateReport: async (..._a: any[]) => ({}),
-  getAllOrders: async () => [],
-  updateOrderStatus: async (..._a: any[]) => ({}),
-  processRefund: async (..._a: any[]) => ({}),
-  getAllCategories: async () => [],
-  createProduct: async (..._a: any[]) => ({}),
-  getAllCountries: async () => ({ countries: [] }),
-  getAllBanners: async () => [],
-  updateBanner: async (..._a: any[]) => ({}),
-  createBanner: async (..._a: any[]) => ({}),
-  deleteBanner: async (..._a: any[]) => ({}),
-  getAllPromotions: async () => [],
-  getAdminProfile: async () => ({ name: 'Admin', email: '', role: 'admin' }),
-};
+
 
 interface Country {
   id: string;
@@ -94,14 +62,18 @@ export const AdminListing4: React.FC = () => {
   const fetchCountries = async () => {
     try {
       setLoading(true);
-      const result = await adminApiService.getAllCountries();
-      if (result) {
-        setCountries(result.countries);
-      }
+      const { data, error: fetchError } = await fetchCountriesFromDB();
+
+      if (fetchError) throw new Error(fetchError);
+      setCountries((data || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        currency: c.currency_code,
+      })));
       setError(null);
-    } catch (err) {
-      setError('Failed to load countries');
-      logger.error(err as Error, { context: 'Admin listing 4 error' });
+    } catch (err: any) {
+      setError(err.message || 'Failed to load countries');
     } finally {
       setLoading(false);
     }

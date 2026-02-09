@@ -1,27 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Star, Heart, ShoppingCart, ShieldCheck,
   Truck, CreditCard, ChevronRight,
   Info, MapPin, Mail, X,
-  Lock, ArrowLeft
+  Lock, ArrowLeft, Loader2
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { MobileNav } from '../components/layout/MobileNav';
-import { mockProducts, hotDeals, trendingDeals } from '../data/mockData';
+import { fetchProductById, fetchProductReviews, fetchSimilarProducts, submitReview } from '../lib/productService';
 import { useCart } from '../contexts/CartContext';
 import { useWishlist } from '../contexts/WishlistContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../utils/currency';
 
-// TODO: Backend stubs — connect to your API
-const requireLogin = (_v: boolean) => {};
-
-const allProducts = [...mockProducts, ...hotDeals, ...trendingDeals];
-
-interface Review {
+interface ReviewItem {
   id: string;
   reviewerName: string;
   rating: number;
@@ -29,6 +24,17 @@ interface Review {
   text: string;
   date: string;
   images: string[];
+}
+
+interface SimilarProduct {
+  id: string;
+  name: string;
+  image_url: string;
+  brand: string;
+  price: number;
+  currency: string;
+  rating: number;
+  discount_price: number | null;
 }
 
 const ProductDetailsPage: React.FC = () => {
@@ -39,12 +45,55 @@ const ProductDetailsPage: React.FC = () => {
   const { currency, convertPrice } = useCurrency();
   const { user } = useAuth();
 
-  const product = allProducts.find((item) => item.id === productId);
+  const [product, setProduct] = useState<any>(null);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [similarProducts, setSimilarProducts] = useState<SimilarProduct[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeImage, setActiveImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState('Free Size');
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewFormData, setReviewFormData] = useState({ rating: 0, heading: '', text: '' });
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    if (!productId) return;
+    setLoading(true);
+    
+    fetchProductById(productId).then(async ({ data }) => {
+      if (data) {
+        setProduct(data);
+        // Fetch reviews
+        const { data: revData } = await fetchProductReviews(productId);
+        setReviews((revData || []).map((r: any) => ({
+          id: r.id,
+          reviewerName: r.profiles?.full_name || 'Anonymous',
+          rating: r.rating,
+          heading: r.heading || '',
+          text: r.comment || '',
+          date: new Date(r.created_at).toLocaleDateString(),
+          images: r.images || [],
+        })));
+        // Fetch similar
+        const { data: simData } = await fetchSimilarProducts(data.category, productId);
+        setSimilarProducts(simData as SimilarProduct[]);
+      }
+      setLoading(false);
+    });
+  }, [productId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white text-gray-900 pb-16 md:pb-0">
+        <Header />
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="animate-spin text-amber-500" size={32} />
+        </div>
+        <Footer />
+        <MobileNav />
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -71,16 +120,44 @@ const ProductDetailsPage: React.FC = () => {
 
   const inWishlist = isInWishlist(product.id);
   const inStock = product.stock > 0;
-  const convertedPrice = convertPrice(product.price, product.currency);
-  const originalPrice = product.discount
-    ? convertPrice(product.price / (1 - product.discount / 100), product.currency)
+  const convertedPrice = convertPrice(product.price, product.currency || 'INR');
+  const originalPrice = product.mrp && product.mrp > product.price
+    ? convertPrice(product.mrp, product.currency || 'INR')
     : convertedPrice;
+  const discountPercent = product.mrp && product.mrp > product.price
+    ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
+    : 0;
 
-  const handleReviewSubmit = (e: React.FormEvent) => {
+  const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Review Submitted For Approval');
-    setIsReviewModalOpen(false);
-    setReviewFormData({ rating: 0, heading: '', text: '' });
+    if (!user || !productId) return;
+    setSubmittingReview(true);
+    const { error } = await submitReview({
+      product_id: productId,
+      user_id: user.id,
+      rating: reviewFormData.rating,
+      heading: reviewFormData.heading,
+      comment: reviewFormData.text,
+    });
+    setSubmittingReview(false);
+    if (error) {
+      alert('Failed to submit review: ' + error);
+    } else {
+      alert('Review submitted successfully!');
+      setIsReviewModalOpen(false);
+      setReviewFormData({ rating: 0, heading: '', text: '' });
+      // Refresh reviews
+      const { data: revData } = await fetchProductReviews(productId);
+      setReviews((revData || []).map((r: any) => ({
+        id: r.id,
+        reviewerName: r.profiles?.full_name || 'Anonymous',
+        rating: r.rating,
+        heading: r.heading || '',
+        text: r.comment || '',
+        date: new Date(r.created_at).toLocaleDateString(),
+        images: r.images || [],
+      })));
+    }
   };
 
   const getStockStatus = () => {
@@ -91,29 +168,16 @@ const ProductDetailsPage: React.FC = () => {
 
   const stockStatus = getStockStatus();
 
-  const galleryImages = [product.image_url, product.image_url, product.image_url, product.image_url, product.image_url];
+  // Use real images array, fallback to single image repeated
+  const galleryImages = product.images && product.images.length > 0
+    ? product.images.slice(0, 5)
+    : [product.image_url, product.image_url, product.image_url, product.image_url, product.image_url];
 
-  // Mock reviews data
-  const mockReviews: Review[] = [
-    {
-      id: '1',
-      reviewerName: 'Sarah Mitchell',
-      rating: 5,
-      heading: 'Outstanding Quality & Fast Shipping',
-      text: 'This product exceeded all my expectations. The quality is premium, packaging was pristine, and it arrived way faster than expected. Will definitely order again!',
-      date: '2 weeks ago',
-      images: ['https://via.placeholder.com/300x300/1f2937/f59e0b?text=Review1']
-    },
-    {
-      id: '2',
-      reviewerName: 'James Cooper',
-      rating: 4,
-      heading: 'Great Value for Money',
-      text: 'Really impressed with the value this offers. Good quality and the support team was helpful when I had questions. Slight delay in shipping but overall very satisfied.',
-      date: '1 month ago',
-      images: ['https://via.placeholder.com/300x300/1f2937/f59e0b?text=Review2']
-    }
-  ];
+  // Get size variants from product data
+  const sizeVariants = (product.product_variants || [])
+    .filter((v: any) => v.variant_type === 'size')
+    .map((v: any) => v.size);
+  const availableSizes = sizeVariants.length > 0 ? sizeVariants : ['Free Size'];
 
   const handleWishlistToggle = () => {
     if (inWishlist) {
@@ -189,7 +253,7 @@ const ProductDetailsPage: React.FC = () => {
                   <span className="text-sm font-bold text-yellow-500">{product.rating || 4.5}</span>
                 </div>
                 <span className="text-xs font-semibold text-gray-500 tracking-wider underline underline-offset-4 cursor-pointer hover:text-gray-900 transition-colors">
-                  {Math.floor(Math.random() * 500)} Reviews
+                  {product.review_count || reviews.length} Reviews
                 </span>
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${stockStatus.color}`}>
                   {stockStatus.label}
@@ -211,9 +275,9 @@ const ProductDetailsPage: React.FC = () => {
                     {formatCurrency(originalPrice, currency)}
                   </span>
                   <div className="flex items-center gap-3 flex-wrap">
-                    {product.discount && product.discount > 0 && (
+                    {discountPercent > 0 && (
                       <span className="bg-red-600 text-gray-900 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                        Save {product.discount}%
+                        Save {discountPercent}%
                       </span>
                     )}
                     <span className="text-[9px] font-bold text-gray-600 uppercase tracking-widest">Inclusive Of All Taxes</span>
@@ -238,7 +302,7 @@ const ProductDetailsPage: React.FC = () => {
                   <button className="text-[9px] font-bold text-yellow-500 uppercase hover:underline">Size Guide</button>
                 </div>
                 <div className="flex flex-wrap gap-2 md:gap-3">
-                  {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((size) => (
+                  {availableSizes.map((size: string) => (
                     <button
                       key={size}
                       onClick={() => setSelectedSize(size)}
@@ -260,7 +324,7 @@ const ProductDetailsPage: React.FC = () => {
               <button
                 onClick={() => {
                   if (!user) {
-                    requireLogin(false);
+                    navigate('/login');
                     return;
                   }
                   addToCart(product);
@@ -273,9 +337,11 @@ const ProductDetailsPage: React.FC = () => {
                 disabled={!inStock}
                 onClick={() => {
                   if (!user) {
-                    requireLogin(false);
+                    navigate('/login');
                     return;
                   }
+                  addToCart(product);
+                  navigate('/cart');
                 }}
                 className="w-full bg-yellow-500 disabled:opacity-30 text-black font-semibold py-4 md:py-5 rounded-2xl transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs hover:bg-yellow-400 active:scale-[0.98] shadow-lg shadow-yellow-500/20"
               >
@@ -287,18 +353,24 @@ const ProductDetailsPage: React.FC = () => {
             <div className="bg-[#0a0a0a] border border-gray-900 rounded-2xl md:rounded-[2.5rem] p-6 md:p-10 mb-8 md:mb-10">
               <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 md:mb-6 font-semibold">Product Details</h3>
               <ul className="space-y-3 md:space-y-4">
-                <li className="flex items-start gap-4 text-sm text-gray-600 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-2 shrink-0" />
-                  Premium quality crafted with precision and attention to detail
-                </li>
-                <li className="flex items-start gap-4 text-sm text-gray-600 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-2 shrink-0" />
-                  Designed for comfort and durability with extended lifespan
-                </li>
-                <li className="flex items-start gap-4 text-sm text-gray-600 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-2 shrink-0" />
-                  Perfect for everyday use with versatile styling options
-                </li>
+                {product.highlights && product.highlights.length > 0 ? (
+                  product.highlights.map((h: string, i: number) => (
+                    <li key={i} className="flex items-start gap-4 text-sm text-gray-600 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-2 shrink-0" />
+                      {h}
+                    </li>
+                  ))
+                ) : product.description ? (
+                  <li className="flex items-start gap-4 text-sm text-gray-600 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-2 shrink-0" />
+                    {product.description}
+                  </li>
+                ) : (
+                  <li className="flex items-start gap-4 text-sm text-gray-600 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-2 shrink-0" />
+                    Premium quality product
+                  </li>
+                )}
               </ul>
             </div>
 
@@ -306,10 +378,10 @@ const ProductDetailsPage: React.FC = () => {
             <div className="bg-[#0a0a0a] border border-gray-900 rounded-2xl md:rounded-[2.5rem] p-6 md:p-10 mb-8 md:mb-10">
               <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 md:mb-6 font-semibold">Additional Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 md:gap-y-6">
-                <InfoRow label="Brand Name" value={product.brand || 'BeauZead'} />
+                <InfoRow label="Brand Name" value={product.brand || 'N/A'} />
                 <InfoRow label="Category" value={product.category} />
                 <InfoRow label="In Stock" value={inStock ? 'Yes' : 'No'} />
-                <InfoRow label="Country Of Origin" value="United Kingdom" />
+                <InfoRow label="Manufacturer" value={product.manufacturer_name || 'N/A'} />
               </div>
             </div>
 
@@ -322,8 +394,8 @@ const ProductDetailsPage: React.FC = () => {
                     <MapPin size={18} className="text-yellow-500" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900 mb-1">BeauZead Premium Store</p>
-                    <p className="text-xs text-gray-500 font-medium leading-relaxed">23, MK6 5HH, United Kingdom</p>
+                    <p className="text-sm font-bold text-gray-900 mb-1">Sold by {product.brand || 'BeauZead Store'}</p>
+                    <p className="text-xs text-gray-500 font-medium leading-relaxed">{product.manufacturer_address || 'Address not available'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
@@ -331,7 +403,7 @@ const ProductDetailsPage: React.FC = () => {
                     <Mail size={18} className="text-yellow-500" />
                   </div>
                   <p className="text-xs text-gray-500 font-medium underline cursor-pointer hover:text-gray-900 transition-colors">
-                    info@beauzead.com
+                    Contact Seller
                   </p>
                 </div>
               </div>
@@ -351,7 +423,7 @@ const ProductDetailsPage: React.FC = () => {
                 </div>
                 <div className="h-8 md:h-10 w-px bg-gray-50" />
                 <p className="text-gray-500 font-bold uppercase text-[10px] tracking-widest font-semibold">
-                  {Math.floor(Math.random() * 500)} Total Reviews
+                  {product.review_count || reviews.length} Total Reviews
                 </p>
               </div>
             </div>
@@ -364,7 +436,9 @@ const ProductDetailsPage: React.FC = () => {
           </div>
 
           <div className="space-y-8 md:space-y-12 mb-12 md:mb-20">
-            {mockReviews.map((review) => (
+            {reviews.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">No reviews yet. Be the first to review!</div>
+            ) : reviews.map((review) => (
               <div key={review.id} className="bg-[#0a0a0a] border border-gray-900 rounded-3xl md:rounded-[3rem] p-6 md:p-10 lg:p-12 relative group overflow-hidden">
                 <div className="flex flex-col md:flex-row gap-8 md:gap-12 relative z-10">
                   <div className="flex-1">
@@ -425,30 +499,37 @@ const ProductDetailsPage: React.FC = () => {
           <h2 className="text-xl md:text-2xl font-semibold mb-8 md:mb-12 uppercase tracking-widest border-l-4 border-yellow-500 pl-4 md:pl-6">
             Similar Products
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
-            {[...Array(8)].map((_, i) => (
-              <div
-                key={i}
-                onClick={() => window.scrollTo(0, 0)}
-                className="group bg-[#0a0a0a] border border-gray-900 rounded-2xl md:rounded-[2rem] overflow-hidden hover:border-yellow-500/40 transition-all cursor-pointer"
-              >
-                <div className="aspect-square bg-gray-50 overflow-hidden">
-                  <img
-                    src={`https://picsum.photos/seed/sim${i}/300/300`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700"
-                    alt="Similar Product"
-                  />
+          {similarProducts.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">No similar products found.</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
+              {similarProducts.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => { navigate(`/products/${item.id}`); window.scrollTo(0, 0); }}
+                  className="group bg-[#0a0a0a] border border-gray-900 rounded-2xl md:rounded-[2rem] overflow-hidden hover:border-yellow-500/40 transition-all cursor-pointer"
+                >
+                  <div className="aspect-square bg-gray-50 overflow-hidden">
+                    <img
+                      src={item.image_url || `https://via.placeholder.com/300x300/1f2937/f59e0b?text=Product`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700"
+                      alt={item.name}
+                      onError={(e) => { e.currentTarget.src = 'https://via.placeholder.com/300x300/1f2937/f59e0b?text=Product'; }}
+                    />
+                  </div>
+                  <div className="p-3 md:p-6">
+                    <p className="text-[9px] font-bold text-yellow-500 uppercase mb-1 md:mb-2 font-semibold">{item.brand || 'Brand'}</p>
+                    <h4 className="text-xs font-semibold text-gray-900 line-clamp-1 group-hover:text-yellow-500 transition-colors uppercase">
+                      {item.name}
+                    </h4>
+                    <p className="text-sm font-bold text-gray-900 mt-2 md:mt-3 font-semibold">
+                      {formatCurrency(convertPrice(item.price, item.currency || 'INR'), currency)}
+                    </p>
+                  </div>
                 </div>
-                <div className="p-3 md:p-6">
-                  <p className="text-[9px] font-bold text-yellow-500 uppercase mb-1 md:mb-2 font-semibold">Premium Brand</p>
-                  <h4 className="text-xs font-semibold text-gray-900 line-clamp-1 group-hover:text-yellow-500 transition-colors uppercase">
-                    Elite Selection Item
-                  </h4>
-                  <p className="text-sm font-bold text-gray-900 mt-2 md:mt-3 font-semibold">$250.00</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
 
@@ -548,9 +629,10 @@ const ProductDetailsPage: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="w-full bg-yellow-500 text-black font-bold py-4 md:py-5 rounded-2xl text-xs uppercase tracking-widest shadow-lg active:scale-[0.98] font-semibold hover:bg-yellow-400 transition-all"
+                  disabled={submittingReview || reviewFormData.rating === 0}
+                  className="w-full bg-yellow-500 text-black font-bold py-4 md:py-5 rounded-2xl text-xs uppercase tracking-widest shadow-lg active:scale-[0.98] font-semibold hover:bg-yellow-400 transition-all disabled:opacity-50"
                 >
-                  Submit Official Review
+                  {submittingReview ? 'Submitting...' : 'Submit Official Review'}
                 </button>
               </form>
             )}
