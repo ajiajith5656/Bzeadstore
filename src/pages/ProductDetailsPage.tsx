@@ -227,7 +227,7 @@ const ProductDetailsPage: React.FC = () => {
 
             {/* Gallery Thumbnails */}
             <div className="grid grid-cols-5 gap-3 md:gap-4">
-              {galleryImages.slice(0, 5).map((img, i) => (
+              {galleryImages.slice(0, 5).map((img: string, i: number) => (
                 <button
                   key={i}
                   onClick={() => setActiveImage(i)}

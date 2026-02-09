@@ -218,10 +218,10 @@ export const SellerKYCSubmissionManagement: React.FC = () => {
                   <Detail label="AML" value={modal.row.aml_compliance ? 'Yes' : 'No'} />
                   <Detail label="Status" value={modal.row.kyc_status} />
                   <Detail label="Submitted" value={modal.row.submitted_at ? new Date(modal.row.submitted_at as string).toLocaleString() : '—'} />
-                  {modal.row.id_document_url && <DocLink label="ID Document" url={modal.row.id_document_url as string} />}
-                  {modal.row.address_proof_url && <DocLink label="Address Proof" url={modal.row.address_proof_url as string} />}
-                  {modal.row.bank_statement_url && <DocLink label="Bank Statement" url={modal.row.bank_statement_url as string} />}
-                  {modal.row.rejection_reason && (
+                  {!!modal.row.id_document_url && <DocLink label="ID Document" url={modal.row.id_document_url as string} />}
+                  {!!modal.row.address_proof_url && <DocLink label="Address Proof" url={modal.row.address_proof_url as string} />}
+                  {!!modal.row.bank_statement_url && <DocLink label="Bank Statement" url={modal.row.bank_statement_url as string} />}
+                  {!!modal.row.rejection_reason && (
                     <div className="col-span-2 bg-red-50 border border-red-200 rounded-lg p-3">
                       <p className="font-semibold text-red-700 text-xs mb-1">Rejection Reason</p>
                       <p className="text-red-600">{String(modal.row.rejection_reason)}</p>

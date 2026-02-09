@@ -87,6 +87,8 @@ export const AdminOverview: React.FC = () => {
           top_categories: categories.slice(0, 5).map((c: any) => ({
             id: c.id,
             name: c.name,
+            is_active: true,
+            created_at: new Date().toISOString(),
           })),
           top_sellers: [],
         });
