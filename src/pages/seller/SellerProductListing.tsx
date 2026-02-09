@@ -18,6 +18,7 @@ import { formatPrice } from '../../constants';
 
 
 // Color options for variants
+const COLOR_OPTIONS = [
   { name: 'Black', hex: '#000000' },
   { name: 'White', hex: '#FFFFFF' },
   { name: 'Red', hex: '#FF0000' },
