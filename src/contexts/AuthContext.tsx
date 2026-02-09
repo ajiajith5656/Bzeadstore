@@ -101,7 +101,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        // Add timeout to prevent getSession from hanging indefinitely
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Auth session timeout')), 5000)
+        );
+
+        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
         if (session?.user && mounted) {
           const profile = await fetchProfile(session.user);
           if (profile) {
