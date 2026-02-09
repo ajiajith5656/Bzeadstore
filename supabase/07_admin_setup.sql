@@ -1,0 +1,19 @@
+-- ============================================
+-- 7. ADMIN USER CREATION (run once)
+-- ============================================
+--
+-- Step 1: Supabase Dashboard > Authentication > Users > Add User
+--   Email:        admin@beauzead.store
+--   Password:     YourSecurePassword123!
+--   Auto Confirm: ON
+--
+-- Step 2: Get UUID from dashboard, then run:
+--   update public.profiles set role = 'admin' where id = 'UUID_HERE';
+--
+-- OR via Supabase Admin API:
+--   const { data } = await supabase.auth.admin.createUser({
+--     email: 'admin@beauzead.store',
+--     password: 'YourSecurePassword123!',
+--     email_confirm: true,
+--     user_metadata: { role: 'admin', full_name: 'Admin' }
+--   });

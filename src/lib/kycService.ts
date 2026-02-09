@@ -347,3 +347,96 @@ export async function getKYCRequirementsByCountry(
 
   return baseRequirements;
 }
+
+// ─── Admin KYC Functions ─────────────────────────────────────────
+
+/** Fetch all KYC submissions (admin only — RLS enforced) */
+export async function fetchAllKYCSubmissions(): Promise<{
+  data: Record<string, unknown>[];
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from('seller_kyc')
+    .select('*')
+    .order('submitted_at', { ascending: false });
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data || []) as Record<string, unknown>[], error: null };
+}
+
+/** Admin approves a KYC submission */
+export async function approveKYC(
+  kycId: string,
+  sellerId: string,
+  adminId: string
+): Promise<KYCSubmitResult> {
+  const { error } = await supabase
+    .from('seller_kyc')
+    .update({
+      kyc_status: 'approved',
+      verified_by_admin: adminId,
+      verified_at: new Date().toISOString(),
+      rejection_reason: null,
+    })
+    .eq('id', kycId);
+
+  if (error) return { success: false, error: error.message };
+
+  // Mark profile as verified + approved
+  await supabase
+    .from('profiles')
+    .update({ is_verified: true, approved: true })
+    .eq('id', sellerId);
+
+  return { success: true, error: null };
+}
+
+/** Admin rejects a KYC submission */
+export async function rejectKYC(
+  kycId: string,
+  sellerId: string,
+  reason: string
+): Promise<KYCSubmitResult> {
+  const { error } = await supabase
+    .from('seller_kyc')
+    .update({
+      kyc_status: 'rejected',
+      rejection_reason: reason,
+      verified_at: new Date().toISOString(),
+    })
+    .eq('id', kycId);
+
+  if (error) return { success: false, error: error.message };
+
+  await supabase
+    .from('profiles')
+    .update({ is_verified: false, approved: false })
+    .eq('id', sellerId);
+
+  return { success: true, error: null };
+}
+
+/** Admin deletes a KYC submission */
+export async function deleteKYC(kycId: string): Promise<KYCSubmitResult> {
+  const { error } = await supabase
+    .from('seller_kyc')
+    .delete()
+    .eq('id', kycId);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, error: null };
+}
+
+/** Admin updates a KYC record */
+export async function updateKYC(
+  kycId: string,
+  updates: Record<string, unknown>
+): Promise<KYCSubmitResult> {
+  const { error } = await supabase
+    .from('seller_kyc')
+    .update(updates)
+    .eq('id', kycId);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, error: null };
+}
