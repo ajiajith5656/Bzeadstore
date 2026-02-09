@@ -1,5 +1,8 @@
-// Currency conversion using a free API (exchangerate-api.com)
-const API_URL = 'https://api.exchangerate-api.com/v4/latest/USD';
+// Currency conversion using ExchangeRate-API v6 (keyed)
+const API_KEY = import.meta.env.VITE_EXCHANGE_RATE_API_KEY || '';
+const API_URL = API_KEY
+  ? `https://v6.exchangerate-api.com/v6/${API_KEY}/latest/USD`
+  : 'https://api.exchangerate-api.com/v4/latest/USD';
 
 interface ExchangeRates {
   [key: string]: number;
@@ -20,9 +23,9 @@ export const fetchExchangeRates = async (): Promise<ExchangeRates> => {
   try {
     const response = await fetch(API_URL);
     const data = await response.json();
-    cachedRates = data.rates;
+    cachedRates = data.conversion_rates || data.rates;
     lastFetch = now;
-    return data.rates;
+    return cachedRates!;
   } catch (error) {
     console.error('Error fetching exchange rates:', error);
     // Return default rates if fetch fails
