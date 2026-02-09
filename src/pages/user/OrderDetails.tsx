@@ -49,7 +49,8 @@ export const OrderDetails: React.FC = () => {
         setLoading(true);
 
         // Fetch order from Supabase
-        const orderData = await fetchOrderById(orderId);
+        const result = await fetchOrderById(orderId);
+        const orderData = result.data;
 
         if (orderData) {
           // Parse items from JSON

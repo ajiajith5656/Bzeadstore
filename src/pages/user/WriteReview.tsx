@@ -42,7 +42,8 @@ export const WriteReview: React.FC = () => {
 
       try {
         setLoading(true);
-        const productData = await fetchProductById(productId);
+        const result = await fetchProductById(productId);
+        const productData = result.data;
 
         if (productData) {
           setProduct(productData as Product);
