@@ -39,7 +39,7 @@ export const AdminOverview: React.FC = () => {
         // Fetch profiles (users + sellers)
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, profile_type, created_at');
+          .select('id, role, created_at');
         const users = profiles || [];
 
         // Fetch categories
@@ -51,9 +51,9 @@ export const AdminOverview: React.FC = () => {
         const totalProducts = count || (productsData || []).length;
 
         // Calculate metrics
-        const totalUsers = users.filter((u: any) => u.profile_type !== 'seller' && u.profile_type !== 'admin').length;
-        const totalSellers = users.filter((u: any) => u.profile_type === 'seller').length;
-        const primeMembers = users.filter((u: any) => u.profile_type === 'prime').length;
+        const totalUsers = users.filter((u: any) => u.role !== 'seller' && u.role !== 'admin').length;
+        const totalSellers = users.filter((u: any) => u.role === 'seller').length;
+        const primeMembers = 0; // Prime membership feature not yet implemented
 
         // Get current month registrations
         const currentMonth = new Date().getMonth();
@@ -65,7 +65,7 @@ export const AdminOverview: React.FC = () => {
         }).length;
 
         const sellerRegistrationsThisMonth = users.filter((u: any) => {
-          if (!u.created_at || u.profile_type !== 'seller') return false;
+          if (!u.created_at || u.role !== 'seller') return false;
           const date = new Date(u.created_at);
           return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
         }).length;

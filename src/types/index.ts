@@ -10,7 +10,6 @@ export interface User {
   approved?: boolean;
   phone?: string;
   address?: string;
-  profile_type?: 'member' | 'prime' | 'admin' | 'seller';
   avatar_url?: string;
   is_verified?: boolean;
   total_purchases?: number;

@@ -102,7 +102,7 @@ export const UserManagement: React.FC = () => {
       fullName.includes(searchTerm.toLowerCase()) ||
       (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesProfileType = !selectedProfileType || user.profile_type === selectedProfileType;
+    const matchesProfileType = !selectedProfileType || user.role === selectedProfileType;
 
     return matchesSearch && matchesProfileType;
   });
@@ -165,11 +165,10 @@ export const UserManagement: React.FC = () => {
             }}
             className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-black focus:border-transparent"
           >
-            <option value="">All Profile Types</option>
-            <option value="member">Member</option>
-            <option value="prime">Prime</option>
-            <option value="admin">Admin</option>
+            <option value="">All Roles</option>
+            <option value="user">User</option>
             <option value="seller">Seller</option>
+            <option value="admin">Admin</option>
           </select>
         </div>
       </div>
@@ -182,7 +181,7 @@ export const UserManagement: React.FC = () => {
               <tr>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Name</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Email</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Profile Type</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Role</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Purchases</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Actions</th>
@@ -198,15 +197,13 @@ export const UserManagement: React.FC = () => {
                     <td className="px-4 py-3 text-sm text-gray-600">{user.email}</td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        user.profile_type === 'prime'
-                          ? 'bg-purple-100 text-purple-800'
-                          : user.profile_type === 'admin'
+                        user.role === 'admin'
                           ? 'bg-red-100 text-red-800'
-                          : user.profile_type === 'seller'
+                          : user.role === 'seller'
                           ? 'bg-orange-100 text-orange-800'
                           : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {user.profile_type?.toUpperCase() || 'MEMBER'}
+                        {user.role?.toUpperCase() || 'USER'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{user.total_purchases || 0}</td>
