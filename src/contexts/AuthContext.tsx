@@ -33,6 +33,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const STORAGE_KEY = 'sb-parladtqltuorczapzfm-auth-token';
+
 // Helper: fetch profile from Supabase `profiles` table
 async function fetchProfile(supabaseUser: SupabaseUser, retries = 3): Promise<User | null> {
   for (let i = 0; i < retries; i++) {
@@ -94,74 +96,85 @@ function toAuthUser(su: SupabaseUser): AuthUser {
   };
 }
 
+/**
+ * Pre-flight: remove expired tokens from localStorage BEFORE the SDK
+ * subscribes to onAuthStateChange.  This prevents _initialize() from
+ * attempting a slow token-refresh that holds the navigator.locks lock
+ * and blocks subsequent signInWithPassword() calls.
+ */
+function clearStaleToken(): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const expiresAt: number | undefined = parsed?.expires_at;
+    if (expiresAt && expiresAt * 1000 < Date.now()) {
+      localStorage.removeItem(STORAGE_KEY);
+      console.info('[Auth] Cleared expired token from localStorage');
+    }
+  } catch {
+    // Corrupt token — remove it so the SDK starts fresh
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* SSR */ }
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [currentAuthUser, setCurrentAuthUser] = useState<AuthUser | null>(null);
   const [authRole, setAuthRole] = useState<User['role'] | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize: check existing Supabase session & listen for auth changes
   useEffect(() => {
     let mounted = true;
+    let initialSessionHandled = false;
 
-    const initSession = async () => {
-      try {
-        // Timeout prevents getSession from hanging indefinitely on cold starts.
-        // The Supabase client also has a 15s per-request fetch timeout (see supabase.ts)
-        // so this is defence-in-depth.
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Auth session check timed out — continuing as guest')), 10_000)
-        );
+    // ── Step 1: Remove expired/corrupt tokens before SDK init ──
+    clearStaleToken();
 
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
-        if (session?.user && mounted) {
-          const profile = await fetchProfile(session.user);
-          if (profile) {
-            setUser(profile);
-            setCurrentAuthUser(toAuthUser(session.user));
-            setAuthRole(profile.role);
-          }
-        }
-      } catch (err) {
-        console.info('[Auth]', (err as Error).message);
-        // Don't call signOut() here — it aborts all in-flight SDK requests.
-        // Just remove the stale token from localStorage directly so the
-        // next signIn starts cleanly without the SDK's internal init lock.
-        try {
-          const storageKey = `sb-parladtqltuorczapzfm-auth-token`;
-          localStorage.removeItem(storageKey);
-        } catch { /* SSR / localStorage unavailable */ }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    initSession();
-
-    // Listen for auth state changes (login, logout, token refresh)
+    // ── Step 2: Single listener — replaces the old initSession() + onAuthStateChange pair ──
+    // The SDK fires INITIAL_SESSION synchronously during subscribe, delivering
+    // the existing session (or null) without a separate getSession() call.
+    // This eliminates the navigator.locks contention that caused login timeouts.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
+      // ── No session (signed out or no existing session) ──
       if (event === 'SIGNED_OUT' || !session?.user) {
         setUser(null);
         setCurrentAuthUser(null);
         setAuthRole(null);
+        if (event === 'INITIAL_SESSION') {
+          initialSessionHandled = true;
+          setLoading(false);
+        }
         return;
       }
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        const profile = await fetchProfile(session.user);
-        if (profile && mounted) {
-          setUser(profile);
-          setCurrentAuthUser(toAuthUser(session.user));
-          setAuthRole(profile.role);
-        }
+      // ── Valid session: INITIAL_SESSION | SIGNED_IN | TOKEN_REFRESHED ──
+      const profile = await fetchProfile(session.user);
+      if (profile && mounted) {
+        setUser(profile);
+        setCurrentAuthUser(toAuthUser(session.user));
+        setAuthRole(profile.role);
+      }
+
+      if (event === 'INITIAL_SESSION') {
+        initialSessionHandled = true;
+        setLoading(false);
       }
     });
 
+    // Safety net: if INITIAL_SESSION never fires (should not happen, defence-in-depth)
+    const safetyTimer = setTimeout(() => {
+      if (mounted && !initialSessionHandled) {
+        console.warn('[Auth] INITIAL_SESSION did not fire within 10 s — continuing as guest');
+        setLoading(false);
+      }
+    }, 10_000);
+
     return () => {
       mounted = false;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);
@@ -210,19 +223,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Sign in with email + password.
-   * After sign-in, fetches profile to get the role and redirects accordingly.
+   * Lock contention is eliminated, so no timeout wrapper is needed.
+   * The per-request 15 s fetch timeout in supabase.ts is the only safety net.
    */
   const signIn = async (email: string, password: string) => {
     try {
-      // The custom fetch in supabase.ts aborts hung requests after 15s,
-      // which releases the SDK lock. This 20s wrapper is a final safety net
-      // so the UI never shows "Signing in..." forever.
-      const signInPromise = supabase.auth.signInWithPassword({ email, password });
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Sign-in timed out. Please try again.')), 20_000)
-      );
-
-      const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
         // Map Supabase errors to user-friendly messages

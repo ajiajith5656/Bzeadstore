@@ -9,18 +9,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 /**
  * Custom fetch with a per-request timeout.
- * Prevents the SDK's internal lock from being held indefinitely when a
- * token-refresh or getSession() request hangs on a stale/expired token.
- * Without this, signInWithPassword() waits forever for the lock to release.
+ * This is now purely a network safety-net — lock contention is handled
+ * architecturally in AuthContext (single onAuthStateChange listener,
+ * no manual getSession() call).  The 15 s timeout ensures no fetch
+ * hangs forever due to network issues.
  */
 const fetchWithTimeout = (
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000); // 15 s per request
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
 
-  // If the caller already provided an AbortSignal, propagate its abort too
+  // Propagate caller-provided AbortSignal
   if (init?.signal) {
     if (init.signal.aborted) {
       controller.abort();
