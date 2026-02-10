@@ -160,8 +160,8 @@ export async function uploadCategoryImage(file: File): Promise<string> {
 export async function fetchCountries() {
   const { data, error } = await supabase
     .from('countries')
-    .select('id, name, code, currency_code, currency_symbol')
-    .order('name');
+    .select('id, country_name, country_code, currency_code')
+    .order('country_name');
   return { data: data || [], error: error?.message || null };
 }
 

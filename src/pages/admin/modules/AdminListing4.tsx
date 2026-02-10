@@ -67,8 +67,8 @@ export const AdminListing4: React.FC = () => {
       if (fetchError) throw new Error(fetchError);
       setCountries((data || []).map((c: any) => ({
         id: c.id,
-        name: c.name,
-        code: c.code,
+        name: c.country_name,
+        code: c.country_code,
         currency: c.currency_code,
       })));
       setError(null);

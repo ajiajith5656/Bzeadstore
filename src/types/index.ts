@@ -60,31 +60,53 @@ export interface Seller {
 
 export interface Product {
   id: string;
-  productId?: string;
+  productId?: string; // alias — frontend convenience, DB uses `id`
   name: string;
   slug?: string;
   description: string;
+  short_description?: string;
   price: number;
+  mrp?: number;
   discount_price?: number;
   currency: string;
   image_url: string;
+  images?: string[];
+  videos?: string[];
   seller_id: string;
   category: string;
-  stock: number;
-  approved: boolean;
-  created_at: string;
-  updated_at?: string;
-  brand?: string;
-  rating?: number;
-  discount?: number;
-  isNew?: boolean;
-  approval_status?: 'pending' | 'approved' | 'rejected';
   sub_category?: string;
+  brand?: string;
+  model_number?: string;
   sku?: string;
-  images?: string[];
+  stock: number;
+  highlights?: string[];
+  specifications?: Record<string, string>;
+  seller_notes?: string[];
+  gst_rate?: number;
+  platform_fee?: number;
+  commission?: number;
+  package_weight?: number;
+  package_length?: number;
+  package_width?: number;
+  package_height?: number;
+  shipping_type?: string;
+  manufacturer_name?: string;
+  manufacturer_address?: string;
+  packing_details?: string;
+  courier_partner?: string;
+  cancellation_policy_days?: number;
+  return_policy_days?: number;
+  approval_status?: 'draft' | 'pending' | 'approved' | 'rejected';
   is_active?: boolean;
   is_featured?: boolean;
   tags?: string[];
+  rating?: number;
+  review_count?: number;
+  created_at: string;
+  updated_at?: string;
+  // Frontend-only convenience fields (not in DB)
+  discount?: number;
+  isNew?: boolean;
 }
 
 export interface CartItem {
