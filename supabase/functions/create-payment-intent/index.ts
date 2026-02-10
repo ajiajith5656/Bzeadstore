@@ -1,21 +1,23 @@
-// Supabase Edge Function: create-payment-intent
+// index.ts — Supabase Edge Function: create-payment-intent
 // Deploy: supabase functions deploy create-payment-intent
-// Set secret: supabase secrets set STRIPE_SECRET_KEY=sk_test_xxx
-//
-// This function creates a Stripe PaymentIntent server-side.
-// The client calls it via: supabase.functions.invoke('create-payment-intent', { body: {...} })
-// OR via fetch to the deployed function URL.
+// Required secret: STRIPE_SECRET_KEY
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+const CORS_ALLOW_HEADERS = 'authorization, x-client-info, apikey, content-type';
+const CORS_ALLOW_METHODS = 'POST, OPTIONS';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+function buildCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? '*';
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': CORS_ALLOW_HEADERS,
+    'Access-Control-Allow-Methods': CORS_ALLOW_METHODS,
+  };
+}
 
-serve(async (req: Request) => {
-  // Handle CORS preflight
+Deno.serve(async (req: Request) => {
+  const corsHeaders = buildCorsHeaders(req);
+
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -29,28 +31,47 @@ serve(async (req: Request) => {
 
   const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY');
   if (!STRIPE_SECRET_KEY) {
+    console.error('Missing STRIPE_SECRET_KEY');
     return new Response(JSON.stringify({ error: 'Stripe secret key not configured' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
+  let body: any;
   try {
-    const { amount, currency, metadata } = await req.json();
+    body = await req.json();
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
-    if (!amount || !currency) {
-      return new Response(JSON.stringify({ error: 'amount and currency are required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  const { amount, currency, metadata } = body ?? {};
 
-    // Build form-encoded body for Stripe API
+  if (amount == null || currency == null) {
+    return new Response(JSON.stringify({ error: 'amount and currency are required' }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    return new Response(JSON.stringify({ error: 'amount must be a positive number' }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
     const params = new URLSearchParams();
-    params.append('amount', String(Math.round(amount)));
-    params.append('currency', currency.toLowerCase());
+    params.append('amount', String(Math.round(numericAmount)));
+    params.append('currency', String(currency).toLowerCase());
     params.append('automatic_payment_methods[enabled]', 'true');
-    if (metadata) {
+
+    if (metadata && typeof metadata === 'object') {
       for (const [k, v] of Object.entries(metadata)) {
         params.append(`metadata[${k}]`, String(v));
       }
@@ -65,35 +86,28 @@ serve(async (req: Request) => {
       body: params.toString(),
     });
 
-    const data = await stripeRes.json();
+    const data = await stripeRes.json().catch(() => null);
 
     if (!stripeRes.ok) {
-      return new Response(
-        JSON.stringify({ error: data.error?.message || 'Stripe API error' }),
-        {
-          status: stripeRes.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+      console.error('Stripe API error', data);
+      return new Response(JSON.stringify({ error: data?.error?.message ?? 'Stripe API error' }), {
+        status: stripeRes.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    return new Response(
-      JSON.stringify({
-        clientSecret: data.client_secret,
-        paymentIntentId: data.id,
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    return new Response(JSON.stringify({
+      clientSecret: data.client_secret,
+      paymentIntentId: data.id,
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message || 'Internal server error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    console.error('Unexpected error', err);
+    return new Response(JSON.stringify({ error: err?.message ?? 'Internal server error' }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
