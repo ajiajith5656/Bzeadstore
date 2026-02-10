@@ -84,6 +84,7 @@ const ShippingPolicy = lazy(() => import('./pages/ShippingPolicy'));
 const RefundPolicy = lazy(() => import('./pages/RefundPolicy'));
 const OTPVerification = lazy(() => import('./pages/OTPVerification'));
 const NewPassword = lazy(() => import('./pages/NewPassword'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 // ── Page loading fallback ─────────────────────────────────────────────
 const PageLoader = () => (
@@ -100,7 +101,8 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { authRole, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const path = location.pathname;
+  // Normalize: strip trailing slashes to avoid mismatch (e.g. "/seller/" vs "/seller")
+  const path = location.pathname.replace(/\/+$/, '') || '/';
 
   useEffect(() => {
     if (loading) return;
@@ -112,17 +114,18 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       '/seller/forgot-password', '/seller/new-password',
       '/admin/login', '/admin/signup',
       '/privacy-policy', '/terms-of-service', '/shipping-policy', '/refund-policy',
-      '/products', '/category',
     ];
 
-    const isPublic = publicPaths.some(p => path === p) ||
-      path.startsWith('/products/') || path.startsWith('/category/');
+    const isPublic = publicPaths.includes(path) ||
+      path.startsWith('/products') || path.startsWith('/category');
 
     if (isPublic) return;
 
     // Block unauthenticated users from all protected routes
     if (!authRole) {
-      if (path.startsWith('/admin') || path.startsWith('/seller/')) {
+      if (path.startsWith('/admin')) {
+        navigate('/login', { replace: true });
+      } else if (path.startsWith('/seller')) {
         navigate('/seller/login', { replace: true });
       } else {
         navigate('/login', { replace: true });
@@ -133,8 +136,9 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // ADMIN ROUTES: Allow admin ONLY
     if (path.startsWith('/admin')) {
       if (authRole !== 'admin') {
-        navigate('/seller', { replace: true });
+        navigate('/', { replace: true });
       }
+      return;
     }
 
     // SELLER ROUTES: Allow seller OR admin
@@ -145,13 +149,14 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       if (authRole !== 'seller' && authRole !== 'admin') {
         navigate('/seller/login', { replace: true });
       }
+      return;
     }
 
     // USER ROUTES: Allow user ONLY (protected user pages)
     if (path.startsWith('/orders') || path.startsWith('/profile') || 
         path.startsWith('/wishlist') || path.startsWith('/cart') ||
         path.startsWith('/checkout') || path.startsWith('/settings') ||
-        path.startsWith('/notifications') || path.startsWith('/user/')) {
+        path.startsWith('/notifications') || path.startsWith('/user')) {
       if (authRole !== 'user') {
         navigate('/login', { replace: true });
       }
@@ -235,8 +240,8 @@ function App() {
                   <Route path="/seller/verify" element={<SellerVerificationWrapper />} />
                   
                   {/* Admin Routes */}
-                  <Route path="/admin/login" element={<Navigate to="/seller/login" replace />} />
-                  <Route path="/admin/signup" element={<Navigate to="/seller/login" replace />} />
+                  <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+                  <Route path="/admin/signup" element={<Navigate to="/login" replace />} />
                   <Route path="/admin/dashboard" element={<Navigate to="/admin" replace />} />
                   
                   {/* Admin Layout Routes */}
@@ -275,8 +280,8 @@ function App() {
                     </Route>
                   </Route>
                   
-                  {/* Fallback */}
-                  <Route path="*" element={<Navigate to="/" />} />
+                  {/* 404 */}
+                  <Route path="*" element={<NotFound />} />
                 </Routes>
                 </Suspense>
               </RouteGuard>
