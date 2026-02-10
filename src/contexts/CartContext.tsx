@@ -100,7 +100,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
       await supabase.from('order_items').insert(orderItems);
 
-      console.log('Order created in Supabase:', order);
       clearCart();
       return order;
     } catch (error) {

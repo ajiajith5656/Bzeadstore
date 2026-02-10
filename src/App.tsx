@@ -1,77 +1,99 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
 import { useWishlistSync } from './hooks/useWishlistSync';
-import { Login } from './components/auth/Login';
-import { Signup } from './components/auth/Signup';
-import { MyOrders } from './pages/user/MyOrders';
-import { NotificationsPage } from './pages/user/Notifications';
-import { WishlistPage } from './pages/user/Wishlist';
-import { CartPage } from './pages/user/Cart';
-import { UserSettings } from './pages/user/Settings';
-import ForgotPassword from './pages/user/ForgotPassword';
-import Profile from './pages/user/Profile';
-import OrderDetails from './pages/user/OrderDetails';
-import WriteReview from './pages/user/WriteReview';
-// import SellerDashboard from './pages/seller/SellerDashboard'; // Unused - using SellerDashboardWrapper instead
-import { SellerDashboardWrapper } from './pages/seller/SellerDashboardWrapper';
-import { SellerLanding } from './pages/seller/SellerLanding';
-import SellerSignup from './pages/seller/SellerSignup';
-import SellerLogin from './pages/seller/SellerLogin';
-import SellerForgotPassword from './pages/seller/SellerForgotPassword';
-import AnalyticsDashboard from './pages/seller/AnalyticsDashboard';
-import SellerProfile from './pages/seller/SellerProfile';
-import { SellerProductListingWrapper } from './pages/seller/SellerProductListingWrapper';
-import { SellerOrderManagementWrapper } from './pages/seller/SellerOrderManagementWrapper';
-import { SellerWalletWrapper } from './pages/seller/SellerWalletWrapper';
-import { SellerVerificationWrapper } from './pages/seller/SellerVerificationWrapper';
-import { AdminLayout } from './pages/admin/AdminLayout';
-import { AdminOverview } from './pages/admin/modules/AdminOverview';
-import { UserManagement } from './pages/admin/modules/UserManagement';
-import { SellerManagement } from './pages/admin/modules/SellerManagement';
-import { ProductManagement } from './pages/admin/modules/ProductManagement';
-import { OrderManagement } from './pages/admin/modules/OrderManagement';
-import { CategoryManagement } from './pages/admin/modules/CategoryManagement';
-import { BannerManagement } from './pages/admin/modules/BannerManagement';
-import { PromotionManagement } from './pages/admin/modules/PromotionManagement';
-import { ReviewManagement } from './pages/admin/modules/ReviewManagement';
-import { ComplaintManagement } from './pages/admin/modules/ComplaintManagement';
-import { AccountsManagement } from './pages/admin/modules/AccountsManagement';
-import { ReportsManagement } from './pages/admin/modules/ReportsManagement';
-import { AdminManagement } from './pages/admin/modules/AdminManagement';
-import { ProfilePage } from './pages/admin/modules/ProfilePage';
-import { SettingsPage } from './pages/admin/modules/SettingsPage';
-import { SellerKYCSubmissionManagement } from './pages/admin/modules/SellerKYCSubmissionManagement';
-import { ProductVariantManagement } from './pages/admin/modules/ProductVariantManagement';
-import SearchManagement from './pages/admin/modules/SearchManagement';
-import AuditLogs from './pages/admin/modules/AuditLogs';
-import SystemHealth from './pages/admin/modules/SystemHealth';
-import { NewHome } from './pages/NewHome';
-import ProductDetailsPage from './pages/ProductDetailsPage';
-import { CategoryProducts } from './pages/CategoryProducts';
-import { SectionProducts } from './pages/SectionProducts';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import TermsService from './pages/TermsService';
-import ShippingPolicy from './pages/ShippingPolicy';
-import RefundPolicy from './pages/RefundPolicy';
-import UserAddressManagement from './pages/user/AddressManagement';
-import AdminAddressManagement from './pages/admin/components/AdminAddressManagement';
-import OTPVerification from './pages/OTPVerification';
-import NewPassword from './pages/NewPassword';
-import Checkout from './pages/user/Checkout';
-import ShippingAddressPage from './pages/user/ShippingAddress';
-import OrderSummaryPage from './pages/user/OrderSummary';
-import OrderConfirmationPage from './pages/user/OrderConfirmation';
-import { ProductListingLayout } from './pages/admin/modules/ProductListingLayout';
-import { AdminListings1 } from './pages/admin/modules/AdminListings1';
-import { AdminListings2 } from './pages/admin/modules/AdminListings2';
-import { AdminListings3 } from './pages/admin/modules/AdminListings3';
-import { AdminListing4 } from './pages/admin/modules/AdminListing4';
-import { AdminListing5 } from './pages/admin/modules/AdminListing5';
-import { AdminListing6 } from './pages/admin/modules/AdminListing6';
+
+// ── Lazy-loaded page components (code-splitting) ──────────────────────
+// Named-only exports use .then() wrapper; default exports load directly.
+
+// Auth
+const Login = lazy(() => import('./components/auth/Login').then(m => ({ default: m.Login })));
+const Signup = lazy(() => import('./components/auth/Signup').then(m => ({ default: m.Signup })));
+
+// User pages
+const MyOrders = lazy(() => import('./pages/user/MyOrders').then(m => ({ default: m.MyOrders })));
+const NotificationsPage = lazy(() => import('./pages/user/Notifications'));
+const WishlistPage = lazy(() => import('./pages/user/Wishlist').then(m => ({ default: m.WishlistPage })));
+const CartPage = lazy(() => import('./pages/user/Cart').then(m => ({ default: m.CartPage })));
+const UserSettings = lazy(() => import('./pages/user/Settings').then(m => ({ default: m.UserSettings })));
+const ForgotPassword = lazy(() => import('./pages/user/ForgotPassword'));
+const Profile = lazy(() => import('./pages/user/Profile'));
+const OrderDetails = lazy(() => import('./pages/user/OrderDetails'));
+const WriteReview = lazy(() => import('./pages/user/WriteReview'));
+const UserAddressManagement = lazy(() => import('./pages/user/AddressManagement'));
+const Checkout = lazy(() => import('./pages/user/Checkout'));
+const ShippingAddressPage = lazy(() => import('./pages/user/ShippingAddress'));
+const OrderSummaryPage = lazy(() => import('./pages/user/OrderSummary'));
+const OrderConfirmationPage = lazy(() => import('./pages/user/OrderConfirmation'));
+
+// Seller pages
+const SellerDashboardWrapper = lazy(() => import('./pages/seller/SellerDashboardWrapper').then(m => ({ default: m.SellerDashboardWrapper })));
+const SellerLanding = lazy(() => import('./pages/seller/SellerLanding').then(m => ({ default: m.SellerLanding })));
+const SellerSignup = lazy(() => import('./pages/seller/SellerSignup'));
+const SellerLogin = lazy(() => import('./pages/seller/SellerLogin'));
+const SellerForgotPassword = lazy(() => import('./pages/seller/SellerForgotPassword'));
+const AnalyticsDashboard = lazy(() => import('./pages/seller/AnalyticsDashboard'));
+const SellerProfile = lazy(() => import('./pages/seller/SellerProfile'));
+const SellerProductListingWrapper = lazy(() => import('./pages/seller/SellerProductListingWrapper'));
+const SellerOrderManagementWrapper = lazy(() => import('./pages/seller/SellerOrderManagementWrapper'));
+const SellerWalletWrapper = lazy(() => import('./pages/seller/SellerWalletWrapper'));
+const SellerVerificationWrapper = lazy(() => import('./pages/seller/SellerVerificationWrapper'));
+
+// Admin pages
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const AdminOverview = lazy(() => import('./pages/admin/modules/AdminOverview'));
+const UserManagement = lazy(() => import('./pages/admin/modules/UserManagement'));
+const SellerManagement = lazy(() => import('./pages/admin/modules/SellerManagement'));
+const ProductManagement = lazy(() => import('./pages/admin/modules/ProductManagement').then(m => ({ default: m.ProductManagement })));
+const OrderManagement = lazy(() => import('./pages/admin/modules/OrderManagement'));
+const CategoryManagement = lazy(() => import('./pages/admin/modules/CategoryManagement'));
+const BannerManagement = lazy(() => import('./pages/admin/modules/BannerManagement'));
+const PromotionManagement = lazy(() => import('./pages/admin/modules/PromotionManagement'));
+const ReviewManagement = lazy(() => import('./pages/admin/modules/ReviewManagement'));
+const ComplaintManagement = lazy(() => import('./pages/admin/modules/ComplaintManagement'));
+const AccountsManagement = lazy(() => import('./pages/admin/modules/AccountsManagement'));
+const ReportsManagement = lazy(() => import('./pages/admin/modules/ReportsManagement'));
+const AdminManagement = lazy(() => import('./pages/admin/modules/AdminManagement'));
+const ProfilePage = lazy(() => import('./pages/admin/modules/ProfilePage'));
+const SettingsPage = lazy(() => import('./pages/admin/modules/SettingsPage'));
+const SellerKYCSubmissionManagement = lazy(() => import('./pages/admin/modules/SellerKYCSubmissionManagement').then(m => ({ default: m.SellerKYCSubmissionManagement })));
+const ProductVariantManagement = lazy(() => import('./pages/admin/modules/ProductVariantManagement'));
+const SearchManagement = lazy(() => import('./pages/admin/modules/SearchManagement'));
+const AuditLogs = lazy(() => import('./pages/admin/modules/AuditLogs'));
+const SystemHealth = lazy(() => import('./pages/admin/modules/SystemHealth'));
+const AdminAddressManagement = lazy(() => import('./pages/admin/components/AdminAddressManagement'));
+const ProductListingLayout = lazy(() => import('./pages/admin/modules/ProductListingLayout'));
+const AdminListings1 = lazy(() => import('./pages/admin/modules/AdminListings1'));
+const AdminListings2 = lazy(() => import('./pages/admin/modules/AdminListings2'));
+const AdminListings3 = lazy(() => import('./pages/admin/modules/AdminListings3'));
+const AdminListing4 = lazy(() => import('./pages/admin/modules/AdminListing4'));
+const AdminListing5 = lazy(() => import('./pages/admin/modules/AdminListing5'));
+const AdminListing6 = lazy(() => import('./pages/admin/modules/AdminListing6'));
+
+// Public pages
+const NewHome = lazy(() => import('./pages/NewHome').then(m => ({ default: m.NewHome })));
+const ProductDetailsPage = lazy(() => import('./pages/ProductDetailsPage'));
+const CategoryProducts = lazy(() => import('./pages/CategoryProducts').then(m => ({ default: m.CategoryProducts })));
+const SectionProducts = lazy(() => import('./pages/SectionProducts').then(m => ({ default: m.SectionProducts })));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const TermsService = lazy(() => import('./pages/TermsService'));
+const ShippingPolicy = lazy(() => import('./pages/ShippingPolicy'));
+const RefundPolicy = lazy(() => import('./pages/RefundPolicy'));
+const OTPVerification = lazy(() => import('./pages/OTPVerification'));
+const NewPassword = lazy(() => import('./pages/NewPassword'));
+
+// ── Page loading fallback ─────────────────────────────────────────────
+const PageLoader = () => (
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+      <span className="text-amber-600 text-lg font-medium">Loading…</span>
+    </div>
+  </div>
+);
 
 // Simple path-based route guard
 const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -162,6 +184,7 @@ function App() {
             <Router>
               <WishlistAutoSync />
               <RouteGuard>
+                <Suspense fallback={<PageLoader />}>
                 <Routes>
                   <Route path="/" element={<NewHome />} />
                   <Route path="/products/section/:section" element={<SectionProducts />} />
@@ -255,6 +278,7 @@ function App() {
                   {/* Fallback */}
                   <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
+                </Suspense>
               </RouteGuard>
             </Router>
           </WishlistProvider>

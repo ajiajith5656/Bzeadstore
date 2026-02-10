@@ -147,7 +147,6 @@ const OTPVerification: React.FC = () => {
 
     try {
       // TODO: Connect to your backend resend OTP API
-      console.log('Resend OTP for', email, purpose);
       // Focus first input
       otpRefs.current[0]?.focus();
     } catch (err: any) {
