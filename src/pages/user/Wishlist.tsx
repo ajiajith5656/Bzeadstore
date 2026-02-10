@@ -4,6 +4,7 @@ import { Footer } from '../../components/layout/Footer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWishlist } from '../../contexts/WishlistContext';
 import { useCart } from '../../contexts/CartContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Trash2, ShoppingCart, Loader2 } from 'lucide-react';
 
@@ -11,6 +12,7 @@ export const WishlistPage: React.FC = () => {
   const { user, currentAuthUser } = useAuth();
   const { items: wishlistItems, removeFromWishlist, loadFromBackend } = useWishlist();
   const { addToCart } = useCart();
+  const { formatPrice, convertPrice } = useCurrency();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -57,9 +59,9 @@ export const WishlistPage: React.FC = () => {
     alert('Added to cart!');
   };
 
-  const totalValue = wishlistItems.reduce((sum, item) => sum + item.price, 0);
+  const totalValue = wishlistItems.reduce((sum, item) => sum + convertPrice(item.price, item.currency), 0);
   const totalSavings = wishlistItems.reduce(
-    (sum, item) => sum + (item.price * (item.discount || 0)) / 100,
+    (sum, item) => sum + (convertPrice(item.price, item.currency) * (item.discount || 0)) / 100,
     0
   );
 
@@ -100,11 +102,11 @@ export const WishlistPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <p className="text-gray-500 text-sm mb-1">Total Value</p>
-                <p className="text-2xl font-bold text-amber-600">₹{totalValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-amber-600">{formatPrice(totalValue)}</p>
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <p className="text-gray-500 text-sm mb-1">Total Savings</p>
-                <p className="text-2xl font-bold text-green-400">₹{Math.round(totalSavings).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-400">{formatPrice(Math.round(totalSavings))}</p>
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <p className="text-gray-500 text-sm mb-1">Items</p>
@@ -138,12 +140,12 @@ export const WishlistPage: React.FC = () => {
                     {/* Price */}
                     <div className="mb-3 flex items-center gap-3">
                       <span className="text-2xl font-bold text-amber-600">
-                        ₹{product.price}
+                        {formatPrice(product.price, product.currency)}
                       </span>
                       {product.discount && (
                         <>
                           <span className="text-sm text-gray-500 line-through">
-                            ₹{Math.round(product.price / (1 - product.discount / 100))}
+                            {formatPrice(Math.round(product.price / (1 - product.discount / 100)), product.currency)}
                           </span>
                           <span className="bg-red-900 text-red-200 px-2 py-1 rounded text-xs font-bold">
                             -{product.discount}%

@@ -3,6 +3,7 @@ import logger from '../../utils/logger';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Package, Truck, RotateCcw, Download, Loader2 } from 'lucide-react';
 import { fetchOrderById } from '../../lib/orderService';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface OrderItem {
   id: string;
@@ -36,6 +37,7 @@ interface ShipmentTracking {
 export const OrderDetails: React.FC = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const [activeTab, setActiveTab] = useState<'items' | 'tracking' | 'invoice'>('items');
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -228,9 +230,9 @@ export const OrderDetails: React.FC = () => {
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">{item.productName}</h3>
                       <p className="text-gray-600 text-sm mt-1">Quantity: {item.quantity}</p>
-                      <p className="text-gray-600 text-sm">Price: ₹{item.price.toLocaleString()}</p>
+                      <p className="text-gray-600 text-sm">Price: {formatPrice(item.price)}</p>
                       <p className="font-semibold text-gray-900 mt-2">
-                        Total: ₹{(item.price * item.quantity).toLocaleString()}
+                        Total: {formatPrice(item.price * item.quantity)}
                       </p>
                       <button
                         onClick={() => handleInitiateReturn(item.id)}
@@ -248,19 +250,19 @@ export const OrderDetails: React.FC = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-semibold">₹{order.subtotal.toLocaleString()}</span>
+                      <span className="font-semibold">{formatPrice(order.subtotal)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Shipping:</span>
-                      <span className="font-semibold">₹{order.shipping.toLocaleString()}</span>
+                      <span className="font-semibold">{formatPrice(order.shipping)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Tax:</span>
-                      <span className="font-semibold">₹{order.tax.toLocaleString()}</span>
+                      <span className="font-semibold">{formatPrice(order.tax)}</span>
                     </div>
                     <div className="border-t pt-2 flex justify-between">
                       <span className="text-gray-900 font-semibold">Total:</span>
-                      <span className="text-lg font-bold text-gray-900">₹{order.total.toLocaleString()}</span>
+                      <span className="text-lg font-bold text-gray-900">{formatPrice(order.total)}</span>
                     </div>
                   </div>
                 </div>
@@ -372,7 +374,7 @@ export const OrderDetails: React.FC = () => {
                     </div>
                     <div className="flex justify-between pt-4 border-t">
                       <span className="text-gray-600">Total Amount:</span>
-                      <span className="text-lg font-bold text-gray-900">₹{order.total.toLocaleString()}</span>
+                      <span className="text-lg font-bold text-gray-900">{formatPrice(order.total)}</span>
                     </div>
                   </div>
                 </div>

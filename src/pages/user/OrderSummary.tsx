@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, ShoppingBag, Edit2, Package } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 
 interface ShippingData {
   street: string;
@@ -21,6 +22,7 @@ const OrderSummaryPage: React.FC = () => {
   const navigate = useNavigate();
   const { items, totalPrice } = useCart();
   const { user, currentAuthUser } = useAuth();
+  const { formatPrice, convertPrice, currency } = useCurrency();
   const [shippingData, setShippingData] = useState<ShippingData | null>(null);
   const [shippingCost] = useState(10); // Fixed shipping cost, can be dynamic
   const [taxRate] = useState(0.08); // 8% tax rate
@@ -41,12 +43,16 @@ const OrderSummaryPage: React.FC = () => {
     }
   }, [items, navigate]);
 
+  // Convert totalPrice (already in user currency from CartContext via convertPrice)
+  const convertedTotal = items.reduce((sum, item) => sum + convertPrice(item.product.price, item.product.currency) * item.quantity, 0);
+  const convertedShipping = convertPrice(shippingCost, 'USD');
+
   const calculateTax = () => {
-    return totalPrice * taxRate;
+    return convertedTotal * taxRate;
   };
 
   const calculateTotal = () => {
-    return totalPrice + shippingCost + calculateTax();
+    return convertedTotal + convertedShipping + calculateTax();
   };
 
   const handleProceedToPayment = () => {
@@ -193,8 +199,8 @@ const OrderSummaryPage: React.FC = () => {
                       <p className="text-sm text-gray-600 mt-1">Quantity: {item.quantity}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-gray-900">${(item.product.price * item.quantity).toFixed(2)}</p>
-                      <p className="text-xs text-gray-500">${item.product.price.toFixed(2)} each</p>
+                      <p className="font-bold text-gray-900">{formatPrice(item.product.price * item.quantity, item.product.currency)}</p>
+                      <p className="text-xs text-gray-500">{formatPrice(item.product.price, item.product.currency)} each</p>
                     </div>
                   </div>
                 ))}
@@ -210,22 +216,22 @@ const OrderSummaryPage: React.FC = () => {
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal ({items.length} items)</span>
-                  <span className="font-semibold text-gray-900">${totalPrice.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatPrice(convertedTotal)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Shipping</span>
-                  <span className="font-semibold text-gray-900">${shippingCost.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatPrice(convertedShipping)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Tax (8%)</span>
-                  <span className="font-semibold text-gray-900">${calculateTax().toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">{formatPrice(calculateTax())}</span>
                 </div>
               </div>
 
               <div className="border-t border-gray-200 pt-4 mb-6">
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
-                  <span className="text-blue-600">${calculateTotal().toFixed(2)}</span>
+                  <span className="text-blue-600">{formatPrice(calculateTotal())}</span>
                 </div>
               </div>
 

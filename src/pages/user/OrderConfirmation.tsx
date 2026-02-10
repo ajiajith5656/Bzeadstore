@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CheckCircle2, Package, MapPin, CreditCard, Download, ArrowRight } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
+import { formatCurrency as fmtCurrency } from '../../utils/currency';
 
 interface OrderData {
   id: string;
@@ -39,6 +41,7 @@ const OrderConfirmationPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { clearCart } = useCart();
+  const { currency } = useCurrency();
   const orderData = location.state?.orderData as OrderData | undefined;
 
   useEffect(() => {
@@ -195,7 +198,7 @@ const OrderConfirmationPage: React.FC = () => {
                     <p className="font-semibold text-gray-900">{item.productName}</p>
                     <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
                   </div>
-                  <p className="font-bold text-gray-900">${(item.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-bold text-gray-900">{fmtCurrency(item.price * item.quantity, currency)}</p>
                 </div>
               ))}
             </div>
@@ -241,7 +244,7 @@ const OrderConfirmationPage: React.FC = () => {
           <div className="border-t border-gray-200 pt-4">
             <div className="flex justify-between items-center text-lg font-bold">
               <span>Total Paid</span>
-              <span className="text-blue-600">${orderData.totalAmount.toFixed(2)}</span>
+              <span className="text-blue-600">{fmtCurrency(orderData.totalAmount, currency)}</span>
             </div>
           </div>
         </div>

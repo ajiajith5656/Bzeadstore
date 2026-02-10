@@ -3,6 +3,7 @@ import logger from '../../utils/logger';
 import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { useNavigate } from 'react-router-dom';
 import { Package, ChevronRight, Loader2 } from 'lucide-react';
 import { fetchOrdersByUser } from '../../lib/orderService';
@@ -19,6 +20,7 @@ interface Order {
 
 export const MyOrders: React.FC = () => {
   const { user, currentAuthUser } = useAuth();
+  const { formatPrice } = useCurrency();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,7 +189,7 @@ export const MyOrders: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-xs text-gray-500 uppercase">Total</p>
-                    <p className="text-lg font-bold text-gray-900">₹{order.total}</p>
+                    <p className="text-lg font-bold text-gray-900">{formatPrice(order.total)}</p>
                   </div>
                   {order.trackingId && (
                     <div>

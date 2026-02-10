@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Star, Upload, Send, Loader2, Package, AlertCircle } from 'lucide-react';
 import logger from '../../utils/logger';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { fetchProductById } from '../../lib/productService';
 import { createReview } from '../../lib/adminService';
 import { supabase } from '../../lib/supabase';
@@ -12,6 +13,7 @@ interface Product {
   name: string;
   image_url?: string;
   price: number;
+  currency?: string;
   images?: string[];
 }
 
@@ -19,6 +21,7 @@ export const WriteReview: React.FC = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
   const { user, currentAuthUser } = useAuth();
+  const { formatPrice } = useCurrency();
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [title, setTitle] = useState('');
@@ -235,7 +238,7 @@ export const WriteReview: React.FC = () => {
             <div className="flex-1">
               <h2 className="text-2xl font-bold text-gray-900">{product.name}</h2>
               <p className="text-gray-600 mt-2">Product ID: {product.id}</p>
-              <p className="text-lg font-semibold text-gray-900 mt-4">₹{product.price.toLocaleString()}</p>
+              <p className="text-lg font-semibold text-gray-900 mt-4">{formatPrice(product.price, product.currency)}</p>
             </div>
           </div>
         </div>

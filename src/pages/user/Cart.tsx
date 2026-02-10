@@ -3,12 +3,14 @@ import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
+import { useCurrency } from '../../contexts/CurrencyContext';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
 
 export const CartPage: React.FC = () => {
   const { user, currentAuthUser } = useAuth();
   const { items: cartItems, removeFromCart, updateQuantity } = useCart();
+  const { formatPrice, convertPrice } = useCurrency();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export const CartPage: React.FC = () => {
     }
   };
 
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  const subtotal = cartItems.reduce((sum, item) => sum + (convertPrice(item.product.price, item.product.currency) * item.quantity), 0);
   const discountAmount = Math.round(subtotal * discount);
   const tax = Math.round((subtotal - discountAmount) * 0.18); // 18% GST
   const total = subtotal - discountAmount + tax;
@@ -133,7 +135,7 @@ export const CartPage: React.FC = () => {
                   <div className="flex-grow">
                     <h3 className="text-lg font-bold text-gray-900 mb-1">{cartItem.product.name}</h3>
                     <p className="text-sm text-gray-500 mb-2">{cartItem.product.brand || 'Brand'}</p>
-                    <p className="text-lg font-bold text-amber-600">₹{cartItem.product.price}</p>
+                    <p className="text-lg font-bold text-amber-600">{formatPrice(cartItem.product.price, cartItem.product.currency)}</p>
                   </div>
 
                   {/* Quantity Controls */}
@@ -200,23 +202,23 @@ export const CartPage: React.FC = () => {
                 <div className="space-y-3 border-b border-gray-200 pb-4">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal</span>
-                    <span>₹{subtotal.toLocaleString()}</span>
+                    <span>{formatPrice(subtotal)}</span>
                   </div>
                   {discount > 0 && (
                     <div className="flex justify-between text-green-400">
                       <span>Discount ({Math.round(discount * 100)}%)</span>
-                      <span>-₹{discountAmount.toLocaleString()}</span>
+                      <span>-{formatPrice(discountAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-gray-600">
                     <span>Tax (18% GST)</span>
-                    <span>₹{tax.toLocaleString()}</span>
+                    <span>{formatPrice(tax)}</span>
                   </div>
                 </div>
 
                 <div className="flex justify-between text-2xl font-bold text-amber-600">
                   <span>Total</span>
-                  <span>₹{total.toLocaleString()}</span>
+                  <span>{formatPrice(total)}</span>
                 </div>
 
                 <button

@@ -1,11 +1,17 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import logger from '../utils/logger';
-import { fetchExchangeRates } from '../utils/currency';
+import { fetchExchangeRates, convertAmount, formatCurrency, currencyForCountry } from '../utils/currency';
+import { supabase } from '../lib/supabase';
 
 interface CurrencyContextType {
+  /** The user's active display currency (ISO 4217, e.g. "INR") */
   currency: string;
+  /** Manually change the display currency */
   setCurrency: (currency: string) => void;
+  /** Convert a price from its source currency to the display currency */
   convertPrice: (amount: number, fromCurrency?: string) => number;
+  /** Convert + format in one call → ready-to-render string like "₹1,234.00" */
+  formatPrice: (amount: number, fromCurrency?: string) => string;
   loading: boolean;
   rates: { [key: string]: number };
 }
@@ -13,36 +19,79 @@ interface CurrencyContextType {
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currency, setCurrencyState] = useState<string>('INR'); // Default to INR for guest users
+  const [currency, setCurrencyState] = useState<string>('INR'); // Default INR for guests
   const [rates, setRates] = useState<{ [key: string]: number }>({});
   const [loading, setLoading] = useState(true);
 
-  // Load currency preference from localStorage and auth
+  // ── 1. Detect user's currency from profile → country → currency_code ──
   useEffect(() => {
-    // First check if there's a user-specific currency (from signup)
-    const savedCurrency = localStorage.getItem('beauzead_currency');
-    const currentAuthUser = localStorage.getItem('current_auth_user');
-    
-    if (savedCurrency) {
-      setCurrencyState(savedCurrency);
-    }
-    
-    // If no saved currency but user is logged in, try to get from user-specific storage
-    if (!savedCurrency && currentAuthUser) {
-      try {
-        const userData = JSON.parse(currentAuthUser);
-        const userCurrency = localStorage.getItem(`currency_${userData.username}`);
-        if (userCurrency) {
-          setCurrencyState(userCurrency);
-          localStorage.setItem('beauzead_currency', userCurrency);
-        }
-      } catch (e) {
-        console.log('Could not parse auth user data');
+    let cancelled = false;
+
+    const detectCurrency = async () => {
+      // Check localStorage first (user's manual choice persists)
+      const manualChoice = localStorage.getItem('beauzead_currency');
+      if (manualChoice) {
+        setCurrencyState(manualChoice);
+        return;
       }
-    }
+
+      // Check if logged in — resolve currency from profile country
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          // Try profile → country_id → countries.currency_code
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('country_id, countries(currency_code)')
+            .eq('id', session.user.id)
+            .single();
+
+          if (!cancelled && profile) {
+            const countryData = profile.countries as any;
+            const resolvedCurrency = countryData?.currency_code
+              || session.user.user_metadata?.currency
+              || 'INR';
+            setCurrencyState(resolvedCurrency);
+            return;
+          }
+
+          // Fallback: user_metadata from signup
+          const metaCurrency = session.user.user_metadata?.currency;
+          if (!cancelled && metaCurrency) {
+            setCurrencyState(metaCurrency);
+            return;
+          }
+        }
+      } catch (err) {
+        // Non-critical — just keep INR default
+        logger.log('Currency auto-detect skipped', err);
+      }
+
+      // Guest user → INR
+      if (!cancelled) setCurrencyState('INR');
+    };
+
+    detectCurrency();
+
+    // Re-detect when auth state changes (login / logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        // Logged out → revert to INR unless manually chosen
+        const manualChoice = localStorage.getItem('beauzead_currency');
+        if (!manualChoice) setCurrencyState('INR');
+        return;
+      }
+      // Logged in → re-run detection
+      detectCurrency();
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Fetch exchange rates on mount and periodically
+  // ── 2. Fetch exchange rates on mount + hourly refresh ─────────────────
   useEffect(() => {
     const loadRates = async () => {
       setLoading(true);
@@ -57,32 +106,41 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
 
     loadRates();
-    // Refresh rates every hour
     const interval = setInterval(loadRates, 3600000);
     return () => clearInterval(interval);
   }, []);
 
+  // ── 3. Manual currency change (persists to localStorage) ──────────────
   const setCurrency = (newCurrency: string) => {
     setCurrencyState(newCurrency);
     localStorage.setItem('beauzead_currency', newCurrency);
   };
 
-  const convertPrice = (amount: number, fromCurrency: string = 'USD'): number => {
-    if (loading || !rates[currency] || !rates[fromCurrency]) {
-      return amount;
-    }
+  // ── 4. Conversion helper ──────────────────────────────────────────────
+  const convertPrice = useCallback(
+    (amount: number, fromCurrency: string = 'INR'): number => {
+      if (!amount) return 0;
+      if (fromCurrency === currency) return amount;
+      if (loading || !rates[currency] || !rates[fromCurrency]) return amount;
+      return convertAmount(amount, fromCurrency, currency, rates);
+    },
+    [currency, rates, loading],
+  );
 
-    // Convert from source currency to USD, then to target currency
-    const amountInUSD = fromCurrency === 'USD' ? amount : amount / rates[fromCurrency];
-    const convertedAmount = currency === 'USD' ? amountInUSD : amountInUSD * rates[currency];
-
-    return Math.round(convertedAmount * 100) / 100;
-  };
+  // ── 5. Convert + format helper ────────────────────────────────────────
+  const formatPriceFn = useCallback(
+    (amount: number, fromCurrency: string = 'INR'): string => {
+      const converted = convertPrice(amount, fromCurrency);
+      return formatCurrency(converted, currency);
+    },
+    [convertPrice, currency],
+  );
 
   const value = {
     currency,
     setCurrency,
     convertPrice,
+    formatPrice: formatPriceFn,
     loading,
     rates,
   };
