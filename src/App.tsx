@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
@@ -77,6 +77,7 @@ import { AdminListing6 } from './pages/admin/modules/AdminListing6';
 const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { authRole, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const path = location.pathname;
 
   useEffect(() => {
@@ -100,9 +101,9 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // Block unauthenticated users from all protected routes
     if (!authRole) {
       if (path.startsWith('/admin') || path.startsWith('/seller/')) {
-        window.location.href = '/seller/login';
+        navigate('/seller/login', { replace: true });
       } else {
-        window.location.href = '/login';
+        navigate('/login', { replace: true });
       }
       return;
     }
@@ -110,7 +111,7 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     // ADMIN ROUTES: Allow admin ONLY
     if (path.startsWith('/admin')) {
       if (authRole !== 'admin') {
-        window.location.href = '/seller';
+        navigate('/seller', { replace: true });
       }
     }
 
@@ -120,7 +121,7 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         path.startsWith('/seller/analytics') || path.startsWith('/seller/profile') ||
         path.startsWith('/seller/verify')) {
       if (authRole !== 'seller' && authRole !== 'admin') {
-        window.location.href = '/seller/login';
+        navigate('/seller/login', { replace: true });
       }
     }
 
@@ -130,10 +131,10 @@ const RouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         path.startsWith('/checkout') || path.startsWith('/settings') ||
         path.startsWith('/notifications') || path.startsWith('/user/')) {
       if (authRole !== 'user') {
-        window.location.href = '/login';
+        navigate('/login', { replace: true });
       }
     }
-  }, [authRole, path, loading]);
+  }, [authRole, path, loading, navigate]);
 
   if (loading) {
     return (
