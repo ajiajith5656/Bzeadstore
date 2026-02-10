@@ -70,7 +70,7 @@ const FALLBACK_RATES: Record<string, number> = {
 
 interface ExchangeRates { [key: string]: number; }
 
-let cachedRates: ExchangeRates | null = null;
+let cachedRates: ExchangeRates = { ...FALLBACK_RATES };
 let lastFetch: number = 0;
 const CACHE_DURATION = 3600000; // 1 hour
 

@@ -73,7 +73,7 @@ export default defineConfig({
               body: params.toString(),
             });
 
-            const data = await stripeRes.json();
+            const data = await stripeRes.json() as Record<string, any>;
 
             if (!stripeRes.ok) {
               res.statusCode = stripeRes.status;

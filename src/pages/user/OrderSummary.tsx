@@ -20,9 +20,9 @@ interface ShippingData {
 
 const OrderSummaryPage: React.FC = () => {
   const navigate = useNavigate();
-  const { items, totalPrice } = useCart();
+  const { items } = useCart();
   const { user, currentAuthUser } = useAuth();
-  const { formatPrice, convertPrice, currency } = useCurrency();
+  const { formatPrice, convertPrice } = useCurrency();
   const [shippingData, setShippingData] = useState<ShippingData | null>(null);
   const [shippingCost] = useState(10); // Fixed shipping cost, can be dynamic
   const [taxRate] = useState(0.08); // 8% tax rate

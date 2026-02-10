@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import logger from '../utils/logger';
-import { fetchExchangeRates, convertAmount, formatCurrency, currencyForCountry } from '../utils/currency';
+import { fetchExchangeRates, convertAmount, formatCurrency } from '../utils/currency';
 import { supabase } from '../lib/supabase';
 
 interface CurrencyContextType {
