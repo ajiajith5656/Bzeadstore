@@ -119,7 +119,23 @@ const SellerSignup: React.FC = () => {
         setFormData((prev) => ({ ...prev, businessTypeId: mappedBusinessTypes[0]?.id || '' }));
       } catch (error) {
         logger.error(error as Error, { context: 'Error fetching data for signup' });
-        setError('Failed to load countries and business types');
+        setError('Failed to load live data — using fallback lists.');
+
+        const fallbackCountries: Country[] = [
+          { id: 'static-ind', countryName: 'India', shortCode: 'IND', currency: 'INR', dialCode: '+91' },
+          { id: 'static-usa', countryName: 'United States', shortCode: 'USA', currency: 'USD', dialCode: '+1' },
+        ];
+        setCountries(fallbackCountries);
+        const india = fallbackCountries.find((c) => c.shortCode === 'IND');
+        setFormData((prev) => ({ ...prev, countryId: india?.id || fallbackCountries[0]?.id || '' }));
+
+        const fallbackBusinessTypes: BusinessType[] = [
+          { id: 'static-individual', typeName: 'Individual' },
+          { id: 'static-brand', typeName: 'Brand' },
+          { id: 'static-freelancing', typeName: 'Freelancing' },
+        ];
+        setBusinessTypes(fallbackBusinessTypes);
+        setFormData((prev) => ({ ...prev, businessTypeId: fallbackBusinessTypes[0]?.id || '' }));
       }
     };
 

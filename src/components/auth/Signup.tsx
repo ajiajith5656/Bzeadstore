@@ -63,6 +63,14 @@ export const Signup: React.FC<SignupProps> = ({ role = 'user' }) => {
         }
       } catch (err) {
         console.error('Error loading countries:', err);
+        const staticCountries: Country[] = [
+          { id: '1', countryName: 'India', shortCode: 'IND', currency: 'INR', dialCode: '+91' },
+          { id: '2', countryName: 'United States', shortCode: 'USA', currency: 'USD', dialCode: '+1' },
+          { id: '3', countryName: 'United Kingdom', shortCode: 'GBR', currency: 'GBP', dialCode: '+44' },
+        ];
+        setCountries(staticCountries);
+        const india = staticCountries.find(c => c.shortCode === 'IND');
+        setCountryId(india?.id || staticCountries[0].id);
       }
     };
     loadCountries();

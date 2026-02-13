@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const AUTH_STORAGE_KEY = 'bzeadstore.auth.token';
+// Keep legacy Supabase storage key to preserve existing sessions after deploy.
+export const AUTH_STORAGE_KEY = 'sb-parladtqltuorczapzfm-auth-token';
 
 const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;

@@ -100,7 +100,7 @@ function toAuthUser(su: SupabaseUser): AuthUser {
  * attempting a slow token-refresh that holds the navigator.locks lock
  * and blocks subsequent signInWithPassword() calls.
  */
-function clearStaleToken(): void {
+  function clearStaleToken(): void {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
     const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
