@@ -4,7 +4,7 @@ import { Eye, EyeOff, Lock, Mail, CheckCircle, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext';
 
 const SellerLogin: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -54,7 +54,9 @@ const SellerLogin: React.FC = () => {
     } else if (userRole === 'seller') {
       navigate('/seller/dashboard');
     } else {
-      navigate('/');
+      // Non-sellers/admins should not stay signed in via seller portal
+      setError('Only sellers or admins can sign in here. Please use the customer login.');
+      await signOut();
     }
     setIsLoading(false);
   };

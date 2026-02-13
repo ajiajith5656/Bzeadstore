@@ -66,10 +66,10 @@ export async function updateSellerBadge(
   sellerId: string,
   badge: string
 ) {
-  // Store badge in seller_kyc or profiles — using role column
+  // Store badge without altering the user's role
   const { error } = await supabase
     .from('profiles')
-    .update({ role: badge })
+    .update({ badge })
     .eq('id', sellerId);
   return { success: !error, error: error?.message || null };
 }

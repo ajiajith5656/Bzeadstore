@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User } from '../types';
-import { supabase } from '../lib/supabase';
+import { supabase, AUTH_STORAGE_KEY } from '../lib/supabase';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import logger from '../utils/logger';
 
@@ -20,7 +20,7 @@ interface AuthContextType {
   currentAuthUser: AuthUser | null;
   authRole: User['role'] | null;
   loading: boolean;
-  signUp: (email: string, password: string, role: 'user' | 'seller' | 'admin', fullName: string, currency?: string, phoneNumber?: string, countryId?: string) => Promise<any>;
+  signUp: (email: string, password: string, role: 'user' | 'seller' | 'admin', fullName: string, currency?: string, phoneNumber?: string, countryId?: string, businessTypeId?: string) => Promise<any>;
   signIn: (
     email: string,
     password: string
@@ -32,8 +32,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const STORAGE_KEY = 'sb-parladtqltuorczapzfm-auth-token';
 
 // Helper: fetch profile from Supabase `profiles` table
 async function fetchProfile(supabaseUser: SupabaseUser, retries = 3): Promise<User | null> {
@@ -104,17 +102,24 @@ function toAuthUser(su: SupabaseUser): AuthUser {
  */
 function clearStaleToken(): void {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
     const expiresAt: number | undefined = parsed?.expires_at;
     if (expiresAt && expiresAt * 1000 < Date.now()) {
-      localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
       console.info('[Auth] Cleared expired token from localStorage');
     }
   } catch {
     // Corrupt token — remove it so the SDK starts fresh
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* SSR */ }
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    } catch {
+      /* noop for non-browser envs */
+    }
   }
 }
 
@@ -191,7 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fullName: string,
     currency?: string,
     phoneNumber?: string,
-    _countryId?: string
+    _countryId?: string,
+    businessTypeId?: string
   ) => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -203,6 +209,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role,
             currency: currency || 'INR',
             phone: phoneNumber || '',
+            country_id: _countryId,
+            business_type_id: businessTypeId,
           },
         },
       });

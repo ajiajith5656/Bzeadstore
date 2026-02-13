@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Loader2, ChevronLeft, RotateCcw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,8 +16,49 @@ const OTPVerification: React.FC = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Get data from location state
-  const { email, purpose, role } = location.state || {};
+  const isBrowser = typeof window !== 'undefined';
+  const locationState = (location.state as { email?: string; purpose?: string; role?: string }) || {};
+
+  const storedOtpContext = useMemo(() => {
+    if (!isBrowser) return null;
+    try {
+      const raw = sessionStorage.getItem('otpContext');
+      return raw ? JSON.parse(raw) as { email?: string; purpose?: string; role?: string } : null;
+    } catch {
+      return null;
+    }
+  }, [isBrowser]);
+
+  const fallbackEmail = useMemo(() => {
+    if (!isBrowser) return undefined;
+    const isSellerPath = location.pathname.includes('/seller');
+    const signupEmail = sessionStorage.getItem(isSellerPath ? 'sellerSignupEmail' : 'signupEmail') || undefined;
+    const resetEmail = sessionStorage.getItem(isSellerPath ? 'sellerPasswordResetEmail' : 'passwordResetEmail') || undefined;
+    return signupEmail || resetEmail;
+  }, [isBrowser, location.pathname]);
+
+  const purpose = locationState.purpose || storedOtpContext?.purpose || (location.pathname.includes('/seller') ? 'seller-signup' : undefined);
+  const email = locationState.email || storedOtpContext?.email || fallbackEmail;
+  const role = locationState.role || storedOtpContext?.role || (purpose?.includes('seller') ? 'seller' : 'user');
+
+  // Persist context for refresh/back-nav resilience
+  useEffect(() => {
+    if (!isBrowser) return;
+    if (email && purpose) {
+      sessionStorage.setItem('otpContext', JSON.stringify({ email, purpose, role }));
+    }
+  }, [email, isBrowser, purpose, role]);
+
+  // Guard: missing context — send user back to a safe auth entry point
+  useEffect(() => {
+    if (!email || !purpose) {
+      const redirectPath = location.pathname.includes('/seller') ? '/seller/login' : '/login';
+      navigate(redirectPath, {
+        state: { message: 'Session expired. Please start again.' },
+        replace: true,
+      });
+    }
+  }, [email, navigate, purpose, location.pathname]);
 
   // Timer for resend OTP
   useEffect(() => {
@@ -57,6 +98,11 @@ const OTPVerification: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    if (!email || !purpose) {
+      setError('Session expired. Please restart verification.');
+      return;
+    }
+
     const otpCode = otp.join('');
     if (otpCode.length !== 6) {
       setError('Please enter a 6-digit OTP code');
@@ -72,20 +118,37 @@ const OTPVerification: React.FC = () => {
         const result = await confirmSignUp(email, otpCode);
         
         if (result.success) {
-          // Now user has a session — store country_id from signup
+          // Now user has a session — apply pending profile fields from signup
           const pendingCountryId = sessionStorage.getItem('signupCountryId');
-          if (pendingCountryId) {
+          const pendingBusinessTypeId = sessionStorage.getItem('signupBusinessTypeId');
+
+          if (pendingCountryId || pendingBusinessTypeId) {
             const { data: { user: currentUser } } = await supabase.auth.getUser();
             if (currentUser) {
-              await supabase
-                .from('profiles')
-                .update({ country_id: pendingCountryId })
-                .eq('id', currentUser.id);
+              const updates: Record<string, string> = {};
+              if (pendingCountryId) updates.country_id = pendingCountryId;
+              if (pendingBusinessTypeId && (purpose === 'seller-signup' || role === 'seller')) {
+                updates.business_type_id = pendingBusinessTypeId;
+              }
+
+              if (Object.keys(updates).length > 0) {
+                await supabase
+                  .from('profiles')
+                  .update(updates)
+                  .eq('id', currentUser.id);
+              }
             }
+
             sessionStorage.removeItem('signupCountryId');
+            sessionStorage.removeItem('signupBusinessTypeId');
           }
 
           setShowSuccess(true);
+
+          // Cleanup OTP context now that verification succeeded
+          if (isBrowser) {
+            sessionStorage.removeItem('otpContext');
+          }
           
           setTimeout(() => {
             if (purpose === 'seller-signup' || role === 'seller') {
@@ -113,6 +176,11 @@ const OTPVerification: React.FC = () => {
       } else if (purpose === 'password-reset' || purpose === 'seller-password-reset') {
         // Store OTP for password reset - navigate to new password page
         setShowSuccess(true);
+
+        if (isBrowser) {
+          sessionStorage.setItem('resetContext', JSON.stringify({ email, otpCode, role }));
+          sessionStorage.removeItem('otpContext');
+        }
         
         setTimeout(() => {
           const newPasswordPath = purpose === 'seller-password-reset' 
@@ -140,13 +208,29 @@ const OTPVerification: React.FC = () => {
 
   const handleResendOtp = async () => {
     if (!canResend) return;
+    if (!email || !purpose) {
+      setError('Session expired. Please restart verification.');
+      return;
+    }
     setError('');
     setResendTimer(30);
     setCanResend(false);
     setOtp(['', '', '', '', '', '']);
 
     try {
-      // TODO: Connect to your backend resend OTP API
+      const resendType = (purpose === 'password-reset' || purpose === 'seller-password-reset')
+        ? 'recovery'
+        : 'signup';
+
+      const { error: resendError } = await supabase.auth.resend({
+        email,
+        type: resendType as 'signup' | 'recovery',
+      });
+
+      if (resendError) {
+        throw new Error(resendError.message);
+      }
+
       // Focus first input
       otpRefs.current[0]?.focus();
     } catch (err: any) {

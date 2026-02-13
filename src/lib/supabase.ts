@@ -1,11 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const AUTH_STORAGE_KEY = 'bzeadstore.auth.token';
+
+const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+const supabaseUrl = rawSupabaseUrl?.trim();
+const supabaseAnonKey = rawSupabaseAnonKey?.trim();
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY environment variables');
 }
+
+if (import.meta.env.PROD && !supabaseUrl.startsWith('https://')) {
+  throw new Error('In production, VITE_SUPABASE_URL must use https');
+}
+
+const stableStorage =
+  typeof window !== 'undefined' && window.localStorage ? window.localStorage : undefined;
 
 /**
  * Custom fetch with a per-request timeout.
@@ -35,7 +47,7 @@ const fetchWithTimeout = (
     if (init.signal.aborted) {
       controller.abort();
     } else {
-      init.signal.addEventListener('abort', () => controller.abort());
+      init.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
   }
 
@@ -45,5 +57,14 @@ const fetchWithTimeout = (
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  global: { fetch: fetchWithTimeout },
+  global: {
+    fetch: fetchWithTimeout,
+    headers: { 'X-Client-Info': 'bzeadstore-web' },
+  },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storageKey: AUTH_STORAGE_KEY,
+    storage: stableStorage,
+  },
 });

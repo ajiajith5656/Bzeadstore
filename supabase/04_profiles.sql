@@ -11,6 +11,7 @@ create table public.profiles (
   avatar_url text,
   country_id uuid references public.countries(id),
   business_type_id uuid references public.business_types(id),
+  badge text default 'standard' check (badge in ('standard','silver','gold','platinum')),
   currency text default 'INR',
   is_verified boolean default false,
   approved boolean default false,

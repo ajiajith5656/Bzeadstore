@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { Loader2, ChevronLeft, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,8 +7,22 @@ const NewPassword: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { confirmPasswordReset } = useAuth();
+  const isBrowser = typeof window !== 'undefined';
+  const { email: stateEmail, otpCode: stateOtpCode, role: stateRole } = location.state || {};
 
-  const { email, otpCode, role } = location.state || {};
+  const storedResetContext = useMemo(() => {
+    if (!isBrowser) return null;
+    try {
+      const raw = sessionStorage.getItem('resetContext');
+      return raw ? JSON.parse(raw) as { email?: string; otpCode?: string; role?: string } : null;
+    } catch {
+      return null;
+    }
+  }, [isBrowser]);
+
+  const email = stateEmail || storedResetContext?.email;
+  const otpCode = stateOtpCode || storedResetContext?.otpCode;
+  const role = stateRole || storedResetContext?.role || (location.pathname.includes('/seller') ? 'seller' : 'user');
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -67,6 +81,11 @@ const NewPassword: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    if (!email || !otpCode) {
+      setError('Session expired. Please restart the reset process.');
+      return;
+    }
+
     // Validate
     if (!newPassword || !confirmPassword) {
       setError('Please enter both passwords');
@@ -92,6 +111,9 @@ const NewPassword: React.FC = () => {
 
       if (result.success) {
         setSuccess(true);
+        if (isBrowser) {
+          sessionStorage.removeItem('resetContext');
+        }
         setTimeout(() => {
           // Redirect to appropriate login page based on role
           const loginPath = role === 'seller' ? '/seller/login' : '/login';

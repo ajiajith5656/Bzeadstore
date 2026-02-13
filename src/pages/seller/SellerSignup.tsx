@@ -15,12 +15,10 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 
-// TODO: Connect to your backend for countries/business types
-interface DBCountry { id: string; name: string; code: string; currency: string; phone_code: string; country_name: string; country_code: string; currency_code: string; dialing_code: string; }
-interface DBBusinessType { id: string; name: string; description?: string; business_type_name: string; }
-const fetchCountries = async (): Promise<DBCountry[]> => [{ id: '1', name: 'India', code: 'IN', currency: 'INR', phone_code: '+91', country_name: 'India', country_code: 'IN', currency_code: 'INR', dialing_code: '+91' }, { id: '2', name: 'United States', code: 'US', currency: 'USD', phone_code: '+1', country_name: 'United States', country_code: 'US', currency_code: 'USD', dialing_code: '+1' }];
-const fetchBusinessTypes = async (): Promise<DBBusinessType[]> => [{ id: '1', name: 'Individual', business_type_name: 'Individual' }, { id: '2', name: 'Brand', business_type_name: 'Brand' }, { id: '3', name: 'Freelancing', business_type_name: 'Freelancing' }];
+interface DBCountry { id: string; country_name: string; country_code: string; currency_code: string; dialing_code: string; is_active?: boolean; }
+interface DBBusinessType { id: string; business_type_name: string; description?: string; is_active?: boolean; }
 
 type SignupStep = 'details' | 'otp' | 'success';
 
@@ -60,47 +58,71 @@ const SellerSignup: React.FC = () => {
   const navigate = useNavigate();
   const { signUp, confirmSignUp } = useAuth();
 
-  // Fetch countries and business types from Aurora PostgreSQL
+  // Fetch countries and business types from Supabase
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [countriesData, businessTypesData] = await Promise.all([
-          fetchCountries(),
-          fetchBusinessTypes(),
+        const [countriesResp, businessTypesResp] = await Promise.all([
+          supabase
+            .from('countries')
+            .select('id, country_name, country_code, currency_code, dialing_code')
+            .eq('is_active', true)
+            .order('country_name'),
+          supabase
+            .from('business_types')
+            .select('id, type_name, description')
+            .eq('is_active', true)
+            .order('type_name'),
         ]);
-        
-        // Map Aurora PostgreSQL format to component format
-        const mappedCountries: Country[] = countriesData.map((c: DBCountry) => ({
+
+        const countriesData: DBCountry[] = countriesResp.data?.map((c: any) => ({
+          id: c.id,
+          country_name: c.country_name,
+          country_code: c.country_code,
+          currency_code: c.currency_code,
+          dialing_code: c.dialing_code,
+        })) || [];
+
+        const businessTypesData: DBBusinessType[] = businessTypesResp.data?.map((b: any) => ({
+          id: b.id,
+          business_type_name: b.type_name,
+          description: b.description,
+        })) || [];
+
+        // Fallback to minimal static options if fetch failed or empty
+        const mappedCountries: Country[] = (countriesData.length ? countriesData : [
+          { id: 'static-ind', country_name: 'India', country_code: 'IND', currency_code: 'INR', dialing_code: '+91' },
+          { id: 'static-usa', country_name: 'United States', country_code: 'USA', currency_code: 'USD', dialing_code: '+1' },
+        ]).map((c) => ({
           id: c.id,
           countryName: c.country_name,
           shortCode: c.country_code,
           currency: c.currency_code,
-          dialCode: c.dialing_code
+          dialCode: c.dialing_code,
         }));
-        
-        const mappedBusinessTypes: BusinessType[] = businessTypesData.map((b: DBBusinessType) => ({
+
+        const mappedBusinessTypes: BusinessType[] = (businessTypesData.length ? businessTypesData : [
+          { id: 'static-individual', business_type_name: 'Individual' },
+          { id: 'static-brand', business_type_name: 'Brand' },
+          { id: 'static-freelancing', business_type_name: 'Freelancing' },
+        ]).map((b) => ({
           id: b.id,
           typeName: b.business_type_name,
-          description: b.description
+          description: b.description,
         }));
-        
-        if (mappedCountries.length > 0) {
-          setCountries(mappedCountries);
-          // Default to India if available, otherwise first country
-          const india = mappedCountries.find(c => c.shortCode === 'IND');
-          setFormData(prev => ({ ...prev, countryId: india?.id || mappedCountries[0].id }));
-        }
 
-        if (mappedBusinessTypes.length > 0) {
-          setBusinessTypes(mappedBusinessTypes);
-          setFormData(prev => ({ ...prev, businessTypeId: mappedBusinessTypes[0].id }));
-        }
+        setCountries(mappedCountries);
+        const india = mappedCountries.find((c) => c.shortCode === 'IND');
+        setFormData((prev) => ({ ...prev, countryId: india?.id || mappedCountries[0]?.id || '' }));
+
+        setBusinessTypes(mappedBusinessTypes);
+        setFormData((prev) => ({ ...prev, businessTypeId: mappedBusinessTypes[0]?.id || '' }));
       } catch (error) {
         logger.error(error as Error, { context: 'Error fetching data for signup' });
         setError('Failed to load countries and business types');
       }
     };
-    
+
     fetchData();
   }, []);
 
@@ -151,6 +173,11 @@ const SellerSignup: React.FC = () => {
       return;
     }
 
+    if (!formData.countryId || !formData.businessTypeId) {
+      setError('Please select a country and business type');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -165,12 +192,17 @@ const SellerSignup: React.FC = () => {
         'seller', 
         formData.fullName, 
         selectedCountry?.currency,
-        phoneNumber // Pass phone number for sellers
+        phoneNumber, // Pass phone number for sellers
+        formData.countryId,
+        formData.businessTypeId
       );
 
       if (result.success) {
         // Store email for OTP verification
         sessionStorage.setItem('sellerSignupEmail', formData.email);
+        sessionStorage.setItem('signupCountryId', formData.countryId);
+        sessionStorage.setItem('signupBusinessTypeId', formData.businessTypeId);
+        sessionStorage.setItem('otpContext', JSON.stringify({ email: formData.email, purpose: 'seller-signup', role: 'seller' }));
         setIsLoading(false);
         
         // Navigate to OTP verification page

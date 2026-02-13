@@ -46,6 +46,8 @@ const SellerForgotPassword: React.FC = () => {
     try {
       const result = await resetPassword(email);
       if (result.success) {
+        sessionStorage.setItem('sellerPasswordResetEmail', email);
+        sessionStorage.setItem('otpContext', JSON.stringify({ email, purpose: 'seller-password-reset', role: 'seller' }));
         setIsLoading(false);
         // Navigate to OTP verification page
         navigate('/seller/otp-verification', {

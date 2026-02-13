@@ -154,6 +154,10 @@ export const Signup: React.FC<SignupProps> = ({ role = 'user' }) => {
         if (countryId) {
           sessionStorage.setItem('signupCountryId', countryId);
         }
+        sessionStorage.setItem(
+          'otpContext',
+          JSON.stringify({ email, purpose: role === 'seller' ? 'seller-signup' : 'signup', role })
+        );
         setLoading(false);
         
         // Navigate to OTP page
