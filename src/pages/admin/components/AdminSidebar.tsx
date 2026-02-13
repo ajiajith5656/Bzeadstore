@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Home,
-  Users,
-  Store,
   Package,
   ShoppingCart,
   Settings,
@@ -34,16 +32,6 @@ const menuItems: MenuItem[] = [
     label: 'Dashboard',
     icon: <Home size={20} />,
     path: '/admin',
-  },
-  {
-    label: 'Users',
-    icon: <Users size={20} />,
-    path: '/admin/users',
-  },
-  {
-    label: 'Sellers',
-    icon: <Store size={20} />,
-    path: '/admin/sellers',
   },
   {
     label: 'Seller KYC',
