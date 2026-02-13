@@ -218,17 +218,24 @@ const OTPVerification: React.FC = () => {
     setOtp(['', '', '', '', '', '']);
 
     try {
-      const resendType = (purpose === 'password-reset' || purpose === 'seller-password-reset')
-        ? 'recovery'
-        : 'signup';
+      if (purpose === 'password-reset' || purpose === 'seller-password-reset') {
+        // For recovery, Supabase recommends resetPasswordForEmail instead of resend
+        const { error: resendError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/new-password`,
+        });
 
-      const { error: resendError } = await supabase.auth.resend({
-        email,
-        type: resendType as 'signup' | 'recovery',
-      });
+        if (resendError) {
+          throw new Error(resendError.message);
+        }
+      } else {
+        const { error: resendError } = await supabase.auth.resend({
+          email,
+          type: 'signup',
+        });
 
-      if (resendError) {
-        throw new Error(resendError.message);
+        if (resendError) {
+          throw new Error(resendError.message);
+        }
       }
 
       // Focus first input
